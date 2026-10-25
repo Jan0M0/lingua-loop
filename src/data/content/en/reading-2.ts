@@ -195,7 +195,7 @@ Local reporters, research suggests, perform unglamorous but essential work. They
 
 Into the vacuum have stepped alternatives of uneven quality. 'Pink-slime' websites copy newspaper names and layouts while publishing little more than press releases, and social media groups spread rumour faster than any retired editor ever spread fact. Residents of such 'news deserts', studies of emergency information suggest, learn later about floods, school closures and public health warnings.
 
-None of this argues for nostalgia. The economics that once supported hundreds of profitable local titles will not return, and philanthropic funding, public subsidies and nonprofit models each carry risks — not least the danger that whoever pays for news eventually seeks influence over it. But treating the outcome as an inevitable consequence of technology obscures a choice. Societies that regard independent local information as a public good, comparable to clean water, may yet decide it is worth paying for deliberately.`,
+None of this argues for nostalgia. The economics that once supported hundreds of profitable local titles will not return, and charitable funding, public subsidies and nonprofit models each carry risks — not least the danger that whoever pays for news eventually seeks influence over it. But treating the outcome as an inevitable consequence of technology obscures a choice. Societies that regard independent local information as a public good, comparable to clean water, may yet decide it is worth paying for deliberately.`,
     questions: [
       {
         id: 'en-read-009-q1',
@@ -204,7 +204,7 @@ None of this argues for nostalgia. The economics that once supported hundreds of
           'Local newspapers closed because their journalists lost their skills.',
           'The closures have civic costs that a purely business-focused account fails to see.',
           'Social media has made emergency information faster and more reliable.',
-          'News organisations should refuse philanthropic funding altogether.',
+          'News organisations should refuse charitable funding altogether.',
         ],
         answerIndex: 1,
         explanation:

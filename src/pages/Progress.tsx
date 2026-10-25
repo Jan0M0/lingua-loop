@@ -1,20 +1,69 @@
-// 进步页：真实数据的趋势、掌握度（含置信度）、错误模式、周报
-import { useMemo, useState } from 'react'
-import { useAppState } from '../state/AppContext'
+// 进步页：真实数据的趋势、掌握度（含置信度）、错误模式、周报 + AI 诊断（P3/P4）
+import { useEffect, useMemo, useState } from 'react'
+import { useActions, useAppState } from '../state/AppContext'
 import { computeMastery } from '../engine/mastery'
 import { weeklyReport, thisWeekStart } from '../engine/recap'
 import { questionTypeStats, typeStatsHighlights } from '../engine/type-stats'
 import { formatMinutes, localDateKey, dateKeyToDate } from '../engine/dates'
 import { Badge, EmptyState, MiniBars, MiniLine, ProgressBar, Segmented } from '../components/ui'
 import { tagLabel } from '../engine/tag-labels'
+import { AgentPacketPanel } from '../components/AgentPacketPanel'
+import { buildStateDigest, diagnosisPacket, getPath, type DiagnosisRecord } from '../engine/packets/diagnosis'
+import { planPacket, type PlanConstraint } from '../engine/packets/plan'
+import { getAllPlans, getMeta, setMeta } from '../storage/db'
 
 const SKILL_LABEL: Record<string, string> = { reading: '阅读', listening: '听力', writing: '写作', speaking: '口语', vocab: '词汇', grammar: '语法' }
 const CONF_LABEL: Record<string, string> = { insufficient: '数据不足', low: '低置信', medium: '中置信', high: '较高置信' }
 
 export function Progress() {
   const state = useAppState()
+  const actions = useActions()
   const [lang, setLang] = useState<'en' | 'es'>('en')
   const now = Date.now()
+
+  // —— AI 诊断（P3）：记录存 kv，最多保留 12 次 ——
+  const [diagnoses, setDiagnoses] = useState<DiagnosisRecord[]>([])
+  const [allPlans, setAllPlans] = useState<Parameters<typeof buildStateDigest>[0]['plans']>([])
+  const [showDiagPanel, setShowDiagPanel] = useState(false)
+  const [showPlanPanel, setShowPlanPanel] = useState(false)
+
+  const loadDiagnoses = async () => {
+    const d = await getMeta<DiagnosisRecord[]>('diagnoses')
+    setDiagnoses(d ?? [])
+  }
+  useEffect(() => {
+    void loadDiagnoses()
+    void getAllPlans().then(setAllPlans)
+  }, [])
+
+  const digest = useMemo(
+    () => buildStateDigest({
+      settings: state.settings,
+      events: state.events,
+      skillStates: state.skillStates,
+      adjustments: state.adjustments,
+      allExercises: state.allExercises,
+      plans: allPlans,
+      now,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.events, state.skillStates, state.adjustments, state.allExercises, allPlans, now],
+  )
+
+  const latestDiag = diagnoses[0]
+  const acceptedFindings = (latestDiag?.findings ?? []).filter((f) => f.status === 'accepted')
+  const existingConstraints = state.adjustments
+    .filter((a) => a.kind === 'plan-constraint' && (a.expiresAt == null || a.expiresAt > now))
+    .map((a) => a.payload as unknown as PlanConstraint)
+
+  const toggleFinding = async (idx: number) => {
+    if (!latestDiag) return
+    const next = diagnoses.map((rec, ri) => ri === 0
+      ? { ...rec, findings: rec.findings.map((f, fi) => fi === idx ? { ...f, status: f.status === 'accepted' ? 'ignored' as const : 'accepted' as const } : f) }
+      : rec)
+    setDiagnoses(next)
+    await setMeta('diagnoses', next)
+  }
 
   const masteries = useMemo(() => {
     const skills = ['reading', 'listening', 'writing', 'speaking', 'vocab', 'grammar'] as const
@@ -88,6 +137,76 @@ export function Progress() {
             <div className="section-title">客观题正确率趋势（滚动累计，最近 10 次）</div>
             <MiniLine points={accuracyTrend} />
           </>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="spread">
+          <h3>🩺 AI 诊断（建议每周一次）</h3>
+          <button className="btn sm" onClick={() => setShowDiagPanel(!showDiagPanel)}>
+            {latestDiag ? '再做一次诊断' : '做第一次诊断'}
+          </button>
+        </div>
+        <p className="small dim">
+          把学习状态摘要交给你的 AI 分析。摘要只含数字聚合（掌握度/正确率/错误标签计数），不含作文、录音或答案原文；
+          每条结论必须引用摘要里的真实字段，引用不到的直接拒收（防幻觉硬校验）。
+        </p>
+        {showDiagPanel && (
+          <AgentPacketPanel
+            def={diagnosisPacket}
+            ctx={{ digest }}
+            onApplied={async () => {
+              await loadDiagnoses()
+              await actions.reloadAll()
+              setShowDiagPanel(false) // 收起面板，立刻露出结论列表与「变成计划约束」入口
+            }}
+          />
+        )}
+        {latestDiag && !showDiagPanel && (
+          <div style={{ marginTop: 10 }}>
+            <div className="small dim">
+              最近一次：{new Date(latestDiag.ts).toLocaleString()} · packet v{latestDiag.promptVersion}
+              {diagnoses.length > 1 && ` · 历史共 ${diagnoses.length} 次`}
+            </div>
+            {latestDiag.findings.map((f, i) => (
+              <div key={i} className="notice small" style={{ marginTop: 6, opacity: f.status === 'ignored' ? 0.45 : 1 }}>
+                <div className="spread">
+                  <span><b>[{f.confidence === 'high' ? '高' : f.confidence === 'medium' ? '中' : '低'}置信]</b> {f.claim}</span>
+                  <button className="btn subtle sm" onClick={() => void toggleFinding(i)}>
+                    {f.status === 'accepted' ? '忽略' : '采信'}
+                  </button>
+                </div>
+                <div className="dim" style={{ marginTop: 2 }}>
+                  证据：{f.evidenceRefs.map((r) => `${r} = ${JSON.stringify(getPath(latestDiag.digest, r))}`).join('；')}
+                </div>
+              </div>
+            ))}
+            {latestDiag.focus.length > 0 && (
+              <div className="small" style={{ marginTop: 6 }}>
+                建议聚焦：{latestDiag.focus.map((f) => `${SKILL_LABEL[f.skill]}${f.tag ? `/${tagLabel(f.tag)}` : ''}（${f.weeks} 周）`).join('、')}
+              </div>
+            )}
+            {latestDiag.actions.length > 0 && (
+              <div className="small dim" style={{ marginTop: 4 }}>行动建议：{latestDiag.actions.join('；')}</div>
+            )}
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn primary sm" disabled={acceptedFindings.length === 0} onClick={() => setShowPlanPanel(!showPlanPanel)}>
+                把采信的 {acceptedFindings.length} 条结论变成计划约束
+              </button>
+            </div>
+            {showPlanPanel && (
+              <div style={{ marginTop: 8 }}>
+                <AgentPacketPanel
+                  def={planPacket}
+                  ctx={{ digest, acceptedFindings, existingConstraints }}
+                  onApplied={async () => {
+                    await actions.reloadAll()
+                    await actions.ensureTodayPlan(true)
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 

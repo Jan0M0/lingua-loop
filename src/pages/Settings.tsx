@@ -1,7 +1,9 @@
-// 设置与备份：目标、预算、比例、兴趣、语音、导出/恢复、清空
-import { useRef, useState } from 'react'
+// 设置与备份：目标、预算、比例、兴趣、语音、导出/恢复、导出审计、清空
+import { useEffect, useRef, useState } from 'react'
 import { useActions, useAppState } from '../state/AppContext'
 import { applyRestore, downloadBackupFile, exportBackup, previewRestore, wipeEverything } from '../storage/backup'
+import { getEgressLog } from '../storage/egress'
+import type { EgressLogEntry } from '../engine/packets/types'
 import { Badge, Segmented } from '../components/ui'
 import { INTEREST_TOPICS } from '../types/content'
 import { topicLabel } from '../engine/recommend'
@@ -22,6 +24,12 @@ export function Settings() {
   const pendingRestore = useRef<Awaited<ReturnType<typeof exportBackup>> | null>(null)
   const [restoreMode, setRestoreMode] = useState<'skip' | 'overwrite'>('skip')
   const [includeRec, setIncludeRec] = useState(false)
+  const [egress, setEgress] = useState<EgressLogEntry[]>([])
+
+  // P5.2 导出审计：哪些字段离开过设备（只记字段名与大小，不记内容）
+  useEffect(() => {
+    void getEgressLog().then(setEgress).catch(() => undefined)
+  }, [])
 
   const doExport = async () => {
     const backup = await exportBackup({ includeRecordings: includeRec })
@@ -131,6 +139,34 @@ export function Settings() {
         <div className="notice info">
           🔒 本应用无账号、无云端、无埋点分析、无任何 LLM API 调用。全部数据（学习记录/错题/词卡进度/作文/录音）仅存于这台设备的浏览器 IndexedDB。首次加载后可断网使用全部核心功能。
         </div>
+      </div>
+
+      <div className="card">
+        <h2>导出审计</h2>
+        <p className="small dim">
+          每次你把交接包指令复制给外部 agent 时，这里记一笔：时间、包类型、带出了哪些字段、多大。
+          <b>只记字段名与大小，不记内容本身</b>。保留最近 200 条。
+        </p>
+        {egress.length === 0 ? (
+          <p className="small dim">还没有任何数据离开过设备的记录。</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data">
+              <thead><tr><th>时间</th><th>类型</th><th>走了什么</th><th>大小</th></tr></thead>
+              <tbody>
+                {egress.slice(0, 30).map((e, i) => (
+                  <tr key={`${e.ts}-${i}`}>
+                    <td className="small">{new Date(e.ts).toLocaleString()}</td>
+                    <td className="small">{e.kind === 'review' ? '批改' : e.kind === 'content' ? '出题' : e.kind === 'diagnosis' ? '诊断' : '计划约束'} <span className="dim mono">v{e.promptVersion}</span></td>
+                    <td className="small mono">{e.fields.join(', ')}</td>
+                    <td className="small">{(e.bytes / 1024).toFixed(1)} KB</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {egress.length > 30 && <p className="small dim">仅显示最近 30 条（共 {egress.length} 条）。</p>}
+          </div>
+        )}
       </div>
 
       <div className="card">

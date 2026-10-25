@@ -1,0 +1,118 @@
+// P4：计划约束如何影响确定性调度器 —— type-cap 跨天计数、difficulty 偏移、过期自动复原。
+// 写作槽在第 6 天配方（day 6），阅读槽在第 4 天（day 4）——测试日期据此选择。
+import { describe, expect, it } from 'vitest'
+import { buildDailyPlan, readPlanConstraints } from '../src/engine/scheduler'
+import type { Adjustment, CardState, DailyPlan, LearningEvent, Settings, SkillState } from '../src/types/app'
+import { DEFAULT_SETTINGS } from '../src/types/app'
+import type { Exercise, ReadingExercise, VocabCard, WritingExercise } from '../src/types/content'
+
+const START = '2026-10-25'
+const DAY6 = '2026-10-30' // 第 6 天：配方含写作槽
+const DAY4 = '2026-10-28' // 第 4 天：配方含阅读槽
+const NOW6 = new Date(`${DAY6}T08:00:00`).getTime()
+const NOW4 = new Date(`${DAY4}T08:00:00`).getTime()
+
+function settings(over: Partial<Settings> = {}): Settings {
+  return { ...DEFAULT_SETTINGS, onboarded: true, startedAt: START, seedSalt: 'test', diagnosticsDone: { en: true, es: true }, ...over }
+}
+
+function vocab(id: string): VocabCard {
+  return {
+    id, language: id.startsWith('es') ? 'es' : 'en', skill: 'vocab', type: 'vocab-card', topic: 'general', difficulty: 3,
+    estimatedMinutes: 1, tags: ['general'], createdAt: START, contentVersion: 1, source: 'original',
+    term: 't', pos: 'n.', glossZh: 'g', definition: 'd', collocations: ['a b', 'c d'],
+    examples: [{ sentence: 's', zh: 'z' }],
+  }
+}
+
+function reading(id: string, difficulty: 1 | 2 | 3 | 4 | 5): ReadingExercise {
+  return {
+    id, language: 'en', skill: 'reading', type: 'reading-mc', topic: 'education', difficulty,
+    estimatedMinutes: 7, tags: ['education'], createdAt: START, contentVersion: 1, source: 'original',
+    title: 'T', titleZh: '题', passage: 'word '.repeat(80),
+    questions: [{ id: `${id}-q1`, stem: 'Q?', options: ['a', 'b', 'c', 'd'], answerIndex: 0, explanation: '原文第一行说明 a 正确；其余与原文不符。', errorTags: ['detail'] }],
+  }
+}
+
+function writing(id: string): WritingExercise {
+  return {
+    id, language: 'en', skill: 'writing', type: 'writing-task', topic: 'education', difficulty: 3,
+    estimatedMinutes: 12, tags: ['education'], createdAt: START, contentVersion: 1, source: 'original',
+    variant: 'ielts-t2', title: 'T2', prompt: 'P', promptZh: '题目', targetWords: [250, 280], suggestedMinutes: 20,
+    checklist: [{ dimension: 'A', descriptors: ['a'] }, { dimension: 'B', descriptors: ['b'] }, { dimension: 'C', descriptors: ['c'] }],
+  }
+}
+
+function pool(): Exercise[] {
+  return [vocab('en-voc-001'), vocab('en-voc-002'), vocab('es-voc-001'), vocab('es-voc-002'),
+    reading('en-read-001', 2), reading('en-read-002', 4), writing('en-w-001'), writing('en-w-002')]
+}
+
+function capAdj(now: number, over: Partial<Adjustment> = {}): Adjustment {
+  return {
+    id: 'plan-c-1', ts: now - 86400000, kind: 'plan-constraint', description: 'test',
+    expiresAt: now + 13 * 86400000,
+    payload: { dimension: 'type-cap', target: 'writing', value: 1, days: 14, reason: 'test' },
+    ...over,
+  }
+}
+
+function priorWritingPlan(generatedAt: number): DailyPlan {
+  return {
+    date: '2026-10-29', mode: 'standard', generatedAt,
+    tasks: [{ id: 'w-prev', kind: 'exercise', language: 'en', skill: 'writing', estMinutes: 12, reasons: [], status: 'done' }],
+    notes: [],
+  }
+}
+
+describe('readPlanConstraints', () => {
+  it('只读未过期的 plan-constraint；同技能取更严格的 cap', () => {
+    const expired = capAdj(NOW6, { id: 'e', ts: NOW6 - 20 * 86400000, expiresAt: NOW6 - 1000 })
+    const looser = capAdj(NOW6, { id: 'l', payload: { dimension: 'type-cap', target: 'writing', value: 3, days: 14, reason: '' } })
+    const c = readPlanConstraints([expired, looser, capAdj(NOW6)], NOW6)
+    expect(c.typeCaps.get('writing')).toEqual({ max: 1, since: NOW6 - 86400000 })
+    expect(c.difficultyShifts.size).toBe(0)
+  })
+})
+
+describe('type-cap 约束下的每日计划（第 6 天：写作槽）', () => {
+  const base6 = { settings: settings(), dateKey: DAY6, now: NOW6, cardStates: [] as CardState[], allExercises: pool(), events: [] as LearningEvent[], skillStates: [] as SkillState[] }
+
+  it('无约束时会安排写作（对照组）', () => {
+    const p = buildDailyPlan({ ...base6, adjustments: [] })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(true)
+  })
+
+  it('约束期内已有 1 次写作 → 今天写作槽被压掉并留说明', () => {
+    const p = buildDailyPlan({ ...base6, adjustments: [capAdj(NOW6)], recentPlans: [priorWritingPlan(NOW6 - 86400000 + 3600000)] })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(false)
+    expect(p.notes.join(' ')).toContain('计划约束生效')
+  })
+
+  it('约束开始之前的历史计划不计入（since 语义）', () => {
+    const p = buildDailyPlan({ ...base6, adjustments: [capAdj(NOW6)], recentPlans: [priorWritingPlan(NOW6 - 2 * 86400000)] })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(true)
+  })
+
+  it('约束过期后自动复原（可撤销性）', () => {
+    const expired = capAdj(NOW6, { expiresAt: NOW6 - 1 })
+    const p = buildDailyPlan({ ...base6, adjustments: [expired], recentPlans: [priorWritingPlan(NOW6 - 86400000 + 3600000)] })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(true)
+  })
+})
+
+describe('difficulty 偏移约束（第 4 天：阅读槽）', () => {
+  it('+1 偏移写进任务理由（可解释）', () => {
+    const adj: Adjustment = {
+      id: 'd1', ts: NOW4 - 1000, kind: 'plan-constraint', description: '', expiresAt: NOW4 + 7 * 86400000,
+      payload: { dimension: 'difficulty', target: 'reading', value: 1, days: 7, reason: 'r' },
+    }
+    const p = buildDailyPlan({
+      settings: settings(), dateKey: DAY4, now: NOW4, cardStates: [], allExercises: pool(),
+      events: [], skillStates: [], adjustments: [adj],
+    })
+    const readingTask = p.tasks.find((t) => t.kind === 'exercise' && t.skill === 'reading')
+    expect(readingTask).toBeTruthy()
+    expect(readingTask!.reasons.join(' ')).toContain('按约束上调 1 档')
+  })
+})

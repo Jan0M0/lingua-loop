@@ -152,3 +152,45 @@
 - QUICKSTART 新增「新机器/云端：一行命令」：`git clone https://github.com/Jan0M0/lingua-loop.git && cd lingua-loop && npm install && npm run build && npm start`，并说明数据按地址隔离、http 非 localhost 下 PWA 受限。
 - 推送前扫描确认：无 .env/密钥/个人数据入库。
 - 仓库：github.com/Jan0M0/lingua-loop（public，便于任何 agent 免凭证 clone；可随时 `gh repo edit Jan0M0/lingua-loop --visibility private` 转私）。
+
+## 2026-10-25 · Agent 交接包架构（P0–P7 全量落地）
+
+**核心决定：只做一个原语。** 四个能力（批改/内容/诊断/计划）全部是「交接包（Packet）」的配置，不是四份重写。
+产品职责永远三件事：定义结构、校验结构、接住结构；理解永远在 agent 那边（运行期零 AI 调用，护栏测试锁死）。
+
+**P0 原语 + 通用面板**
+- `src/engine/packets/`：`types.ts`（PacketKind/PacketEnvelope/PacketDef——buildPrompt/parse(ctx)/preview/apply/egressFields）、`parse.ts`（extractJson 平衡括号扫描 + unwrapEnvelope 裸/信封双吃 + envelopeExample 四包共用）、`review.ts`（批改：标签必须出自 ERROR_TAGS、evidence 必须逐字引用原文、绝不给分）。
+- `src/components/AgentPacketPanel.tsx`：步骤条（①复制 ②交给 AI ③粘回 ④完成）、「复制并打开 ChatGPT」、拖入/选择 .txt/.json、解析→**预览（将写入什么、影响哪条）**→确认、失败保留原文、复制即记 egress 审计。
+- FeedbackParser（关键词通道）按方案"明确不做"保留为离线降级，收纳进写作页折叠；两个调用点不破坏。
+
+**P1 内容生成**（`content.ts` + 内容库「✨ 用 AI 出题」入口）：prompt 内嵌完整字段示例、ID 前缀规范（en-voc-/en-read-/en-ls-）、题目编号 `${id}-qN`、难度锚点（en: Band 对应 / es: CEFR 对应）、原创红线、avoidIds 防撞号；parse 逐条喂 validateRawContent，apply 打 `agent-generated` 标记入库，内容库可按「AI 生成」单独筛选。首批三种题型：词卡/单选阅读/单选听力。
+
+**P2 口语通道**：SpeakingRunner 拆出 done 阶段（先落库再批改，写入路径才存在）；导出录音为用户主动动作；transcript ≥20 字才出批改面板；批改进同一套标签体系（feedback-tags.ts 参数化 recordLabel）。
+
+**P3 诊断包**（`diagnosis.ts` + Progress「AI 诊断」卡片）：buildStateDigest 从真实数据算 28 天窗口聚合（掌握度/正确率/错误标签计数/坚持度/内容余量），**不含任何原文**；防幻觉硬校验——每条结论的 evidenceRefs 必须能在 digest 里解析到，解析不到整条拒收；记录存 kv `diagnoses`（留 12 次，带 promptVersion）；Progress 展示结论 + 证据数值 + 采信/忽略。
+
+**P4 计划约束**（`plan.ts` + scheduler 接入）：agent 只写约束不排计划——type-cap/skill-share/difficulty 三维度；硬边界全部在 parse 拦截（difficulty ±1、days ≤30、占比合计 ≤1、cap 1–6）；写成 Adjustment kind `plan-constraint`（expiresAt 自动过期，无需 DB 迁移）；`readPlanConstraints` + `recentPlans` 输入让确定性调度器在边界内照常排（跨天计数、since 语义、更严格 cap 优先）；难度偏移写进任务理由保持可解释。忽略的结论不下发给 plan 包。
+
+**P5 分发 + 审计**：`public/llms.txt`（agent 版说明书：四包何时调用、信封格式、红线）+ `agent/lingua-loop.md`（仓库内 agent 协作说明），与 `packets/types.ts` 常量同源；`storage/egress.ts` kv `egressLog`（200 条，只记字段名与字节数）+ 设置页「导出审计」表。
+
+**P6 打磨**：批改主按钮化（不再藏 details）、上次批改时间显示（kv lastReviewAt）、Today 页距上次诊断 >7 天轻提示（可关）、出题（内容库）与批改（任务页）入口分离、面板步骤条与文件拖入。
+
+**P7 回归集骨架**：`docs/prompts/eval/`（README + 四包各 3–5 黄金用例：输入 + 必须满足的断言，含对抗用例——诱导给分/复制真题/编造数据/越界约束）；PROMPT_VERSION 常量随包走，写入审计日志与诊断记录。改 prompt 必须 +1 并人工过一遍用例。
+
+**护栏与测试**
+- `tests/no-ai-endpoints.test.ts`：完成标准第 5 条写成测试——src/ 全目录大小写敏感扫 `api.openai|anthropic|generativelanguage` 必须空 + 依赖清单断言（只有 react/react-dom/idb）。顺手把阅读语料里的 "philanthropic funding" 改为 "charitable funding"（全小写子串会命中 anthropic，且 charitable 语义等价）。
+- 新增测试：packets-parse 9、packet-review 6、packet-content 7、packet-diagnosis 9、packet-plan 10、scheduler-constraints 6、no-ai-endpoints 2。**全量 25 文件 / 152 测全绿**（原 103 → +49），tsc 0 错误，build 成功。
+
+**浏览器实测（IAB，origin 4322）**
+- 内容包端到端：出题弹窗（表单/面板/步骤条/审计提示/文件入口）→ 模拟 agent 信封回复 → 解析预览（en-voc-901/902 词卡）→ 确认写入「入库 2 条」→ 内容库筛「AI 生成」精确命中 2 条带徽章。
+- 诊断包端到端：诊断面板 → 模拟回复 → 应用「已保存 1/12」→ 刷新后结论+证据数值+建议聚焦+采信/忽略按钮全部渲染（修了一个 UX 缺陷：应用后面板不再挡住结论列表）。
+- 计划约束端到端：忽略 1 条结论 → 按钮实时变为「把采信的 1 条结论…」→ 面板写入「已写入 1 条计划约束，明天起生效（14 天自动过期）」。
+- 设置页导出审计表渲染（空态文案正常）。
+
+**六条完成标准逐条对照**
+1. 补题 5 分钟闭环 ✓（出题入口一键到入库，实测走通；上限 10 条/次）
+2. 写作+口语批改进统一标签体系 ✓（同一 reviewPacket → applyConfirmedFeedback；单测覆盖写入与并集不覆盖；口语页批改走 done 阶段，浏览器未逐页点击，组件同款已实测——如实说明）
+3. 每周诊断改动两周安排 ✓（诊断→采信→约束→调度器跨天生效，单测覆盖 cap/since/过期/偏移；Today 页 >7 天提醒）
+4. 离开设备的字段可审计 ✓（复制即记 kv egressLog 200 条，设置页表格；IAB 剪贴板受限时降级提示且不误记）
+5. grep 测试 ✓（见上，152 测之一）
+6. 断网核心可用 ✓（本轮零新增网络调用；离线能力此前里程碑已实测，SW 逻辑未动）

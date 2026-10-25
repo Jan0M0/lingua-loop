@@ -1,4 +1,4 @@
-// 写作运行器：限时/字数/规则分析/自评清单/草稿历史/导出/外部反馈粘贴
+// 写作运行器：限时/字数/规则分析/自评清单/草稿历史/导出/AI 批改（agent 交接包）+ 离线关键词通道
 import { useEffect, useMemo, useState } from 'react'
 import type { LearningEvent, PlannedTask, WritingDraft } from '../types/app'
 import type { WritingExercise } from '../types/content'
@@ -6,6 +6,9 @@ import { useActions, useAppState } from '../state/AppContext'
 import { analyzeWriting, type WritingAnalysis } from '../engine/writing-analyzer'
 import { Badge } from '../components/ui'
 import { FeedbackParser } from '../components/FeedbackParser'
+import { AgentPacketPanel } from '../components/AgentPacketPanel'
+import { reviewPacket } from '../engine/packets/review'
+import { getMeta } from '../storage/db'
 
 const EVAL_OPTIONS = ['没做到', '部分做到', '做到了'] as const
 
@@ -21,6 +24,12 @@ export function WritingRunner({ task, onFinish }: { task: PlannedTask; onFinish:
   const [selfEval, setSelfEval] = useState<Record<string, number>>({})
   const [external, setExternal] = useState(existingDraft?.externalFeedback ?? '')
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [lastReview, setLastReview] = useState<{ exerciseId: string; ts: number } | null>(null)
+
+  // 「上次 AI 批改」提示（P6）
+  useEffect(() => {
+    void getMeta<{ exerciseId: string; ts: number }>('lastReviewAt').then((r) => setLastReview(r ?? null)).catch(() => undefined)
+  }, [ex?.id])
 
   useEffect(() => {
     if (!timerOn) return
@@ -159,29 +168,59 @@ export function WritingRunner({ task, onFinish }: { task: PlannedTask; onFinish:
               <b>{c.label}</b>：<span className="small">{c.detail}</span>
             </div>
           ))}
-          <h3 style={{ marginTop: 12 }}>粘贴外部反馈（可选）</h3>
-          <p className="small dim">把老师/其他工具的批改粘贴在这里存档；下方能把它拆成「候选错误标签 + 行动项」，勾选确认后才会写进最近一次写作记录（应用不会自动采信外部文字）。</p>
-          <textarea value={external} onChange={(e) => setExternal(e.target.value)} rows={4} placeholder="粘贴老师的批改/建议…" />
-          <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn" onClick={() => persist('保存外部反馈')}>保存反馈原文</button>
-            <button className="btn primary lg" onClick={onFinish}>完成任务</button>
-          </div>
-          {external.trim() && (
-            <details style={{ marginTop: 8 }}>
-              <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>解析为错误标签 / 行动项</summary>
-              <div style={{ marginTop: 8 }}>
-                <FeedbackParser
-                  text={external}
-                  language={ex.language}
-                  alreadyTags={existingDraft?.confirmedTags ?? []}
-                  onConfirm={async (tags, acts) => {
-                    const res = await actions.applyDraftFeedbackTags(ex.id, tags, acts)
-                    return res.note
-                  }}
-                />
-              </div>
-            </details>
+          <h3 style={{ marginTop: 12 }}>AI 批改（推荐）</h3>
+          {lastReview && lastReview.exerciseId === ex.id && (
+            <p className="small dim" style={{ margin: 0 }}>
+              上次批改：{Math.floor((Date.now() - lastReview.ts) / 86400000) === 0 ? '今天' : `${Math.floor((Date.now() - lastReview.ts) / 86400000)} 天前`}。
+            </p>
           )}
+          <p className="small dim">
+            把这篇作文交给你的 AI 批改：结果按统一错误标签入库（与错题本同一套体系），<b>不给分、不猜等级</b>。
+            复制指令 → 粘给你的 agent → 把回复粘回来，本地校验后才写入。
+          </p>
+          <AgentPacketPanel
+            def={reviewPacket}
+            ctx={{
+              language: ex.language,
+              skill: 'writing',
+              exerciseId: ex.id,
+              taskTitle: ex.title,
+              taskPrompt: ex.prompt,
+              sourceText: text,
+              checklist: ex.checklist.map((c) => c.dimension),
+              alreadyTags: existingDraft?.confirmedTags ?? [],
+            }}
+            onApplied={() => void actions.reloadAll()}
+          />
+
+          <details style={{ marginTop: 12 }}>
+            <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>离线通道：粘贴老师/其他工具的批改（不用 AI，本地关键词解析）</summary>
+            <div style={{ marginTop: 8 }}>
+              <textarea value={external} onChange={(e) => setExternal(e.target.value)} rows={4} placeholder="粘贴老师的批改/建议…" />
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn" onClick={() => persist('保存外部反馈')}>保存反馈原文</button>
+              </div>
+              {external.trim() && (
+                <div style={{ marginTop: 8 }}>
+                  <FeedbackParser
+                    text={external}
+                    language={ex.language}
+                    alreadyTags={existingDraft?.confirmedTags ?? []}
+                    onConfirm={async (tags, acts) => {
+                      const res = await actions.applyDraftFeedbackTags(ex.id, tags, acts)
+                      return res.note
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </details>
+
+          <div className="row" style={{ marginTop: 14 }}>
+            <button className="btn primary lg" onClick={onFinish}>完成任务</button>
+            <span className="small dim">AI 批改是可选的，不批改也能完成。</span>
+          </div>
+
           {existingDraft && existingDraft.history.length > 0 && (
             <details style={{ marginTop: 10 }}>
               <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>修订历史（初稿 vs 修改稿）</summary>

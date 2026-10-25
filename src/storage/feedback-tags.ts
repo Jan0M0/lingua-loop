@@ -27,8 +27,10 @@ export async function applyConfirmedFeedback(
   exerciseId: string,
   tags: readonly string[],
   actions: readonly string[] = [],
-  now: number = Date.now(),
+  opts: { now?: number; recordLabel?: string } = {},
 ): Promise<ApplyFeedbackOutcome> {
+  const now = opts.now ?? Date.now()
+  const recordLabel = opts.recordLabel ?? '写作'
   const cleanTags = mergeTags([], tags)
   const cleanActions = actions.map((a) => a.trim()).filter(Boolean).slice(0, 5)
   if (cleanTags.length === 0 && cleanActions.length === 0) {
@@ -75,6 +77,6 @@ export async function applyConfirmedFeedback(
     draft: updatedDraft,
     tags: cleanTags,
     actions: cleanActions,
-    note: `已写入${summary}到最近一次写作记录（${new Date(target.ts).toLocaleDateString()}）。`,
+    note: `已写入${summary}到最近一次${recordLabel}记录（${new Date(target.ts).toLocaleDateString()}）。`,
   }
 }

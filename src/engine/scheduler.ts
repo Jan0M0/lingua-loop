@@ -7,6 +7,7 @@ import { seededRandom, seededShuffle } from './seed'
 import { sortDue } from './srs'
 import { computeMastery, type MasteryResult } from './mastery'
 import { activeDeprioritizations } from './feedback'
+import type { PlanConstraint } from './packets/plan'
 import { dayRecipes, weeklyPatterns } from '../data/curriculum/recipes'
 import { enWeeks } from '../data/curriculum/en-weeks'
 import { esWeeks } from '../data/curriculum/es-weeks'
@@ -21,7 +22,42 @@ export interface SchedulerInput {
   events: LearningEvent[] // 全部事件（用于冷却/错题/掌握度）
   skillStates: SkillState[]
   adjustments: Adjustment[]
+  /** 约束期内的历史计划（type-cap/skill-share 需要；缺省只按当天算） */
+  recentPlans?: DailyPlan[]
   vocabBatchSize?: number // 新词卡一次引入数量，默认 8
+}
+
+/** P4 计划约束：从 adjustments 里读出仍然生效的 agent 约束（确定性调度器只是在这些边界内排） */
+export interface ActivePlanConstraints {
+  typeCaps: Map<Skill, { max: number; since: number }>
+  skillShares: Map<Skill, { share: number; since: number }>
+  difficultyShifts: Map<Skill, number>
+}
+
+export function readPlanConstraints(adjustments: Adjustment[], now = Date.now()): ActivePlanConstraints {
+  const typeCaps = new Map<Skill, { max: number; since: number }>()
+  const skillShares = new Map<Skill, { share: number; since: number }>()
+  const difficultyShifts = new Map<Skill, number>()
+  for (const a of adjustments) {
+    if (a.kind !== 'plan-constraint') continue
+    if (a.expiresAt != null && a.expiresAt <= now) continue
+    const c = a.payload as PlanConstraint | undefined
+    if (c == null || typeof c !== 'object' || typeof c.target !== 'string') continue
+    if (c.dimension === 'type-cap' && Number.isInteger(c.value)) {
+      // 同技能取更严格的（更小 max、更早起点）
+      const cur = typeCaps.get(c.target as Skill)
+      if (!cur || c.value < cur.max || (c.value === cur.max && a.ts < cur.since)) {
+        typeCaps.set(c.target as Skill, { max: c.value, since: a.ts })
+      }
+    } else if (c.dimension === 'skill-share' && Number.isFinite(c.value)) {
+      skillShares.set(c.target as Skill, { share: c.value, since: a.ts })
+    } else if (c.dimension === 'difficulty' && Number.isInteger(c.value)) {
+      difficultyShifts.set(c.target as Skill, (difficultyShifts.get(c.target as Skill) ?? 0) + c.value)
+    }
+  }
+  // 多条叠加仍夹在 ±1（apply 已校验单条 ±1，这里双保险）
+  for (const [k, v] of difficultyShifts) difficultyShifts.set(k, Math.max(-1, Math.min(1, v)))
+  return { typeCaps, skillShares, difficultyShifts }
 }
 
 const REVIEW_MINUTES_PER_CARD = 0.5
@@ -133,6 +169,7 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
   // 3) 到期复习置顶（SRS 承诺优先）
   const depri = activeDeprioritizations(adjustments, now)
   const depriTypes = new Set(depri.map((a) => (a.payload as { exerciseType?: string })?.exerciseType).filter(Boolean))
+  const planConstraints = readPlanConstraints(adjustments, now)
   let used = 0
   const reviewCap = mode === 'minimum' ? Math.min(16, budget / REVIEW_MINUTES_PER_CARD) : Math.min(30, Math.ceil(budget * 0.4) / REVIEW_MINUTES_PER_CARD)
   for (const lang of ['en', 'es'] as Language[]) {
@@ -260,9 +297,34 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
 
     // exercise 槽
     const skill = s.skill ?? 'reading'
+    // P4 计划约束（诊断→约束→调度器在边界内照常确定性排）
+    const cap = planConstraints.typeCaps.get(skill)
+    if (cap) {
+      const recentCount = (input.recentPlans ?? [])
+        .filter((p) => p.generatedAt >= cap.since)
+        .reduce((n, p) => n + p.tasks.filter((t) => t.kind === 'exercise' && t.skill === skill).length, 0)
+      const currentCount = tasks.filter((t) => t.kind === 'exercise' && t.skill === skill).length
+      if (recentCount + currentCount >= cap.max) {
+        notes.push(`计划约束生效：「${skillLabelZh(skill)}」约束期内最多安排 ${cap.max} 次，已达上限，今天不排。`)
+        continue
+      }
+    }
+    const shareC = planConstraints.skillShares.get(skill)
+    if (shareC) {
+      const windowPlans = (input.recentPlans ?? []).filter((p) => p.generatedAt >= shareC.since)
+      const recentSkill = windowPlans.reduce((n, p) => n + p.tasks.filter((t) => t.kind === 'exercise' && t.skill === skill).length, 0)
+      const recentTotal = windowPlans.reduce((n, p) => n + p.tasks.filter((t) => t.kind === 'exercise').length, 0)
+      const curSkill = tasks.filter((t) => t.kind === 'exercise' && t.skill === skill).length
+      const curTotal = tasks.filter((t) => t.kind === 'exercise').length
+      if (recentTotal + curTotal >= 4 && (recentSkill + curSkill) / (recentTotal + curTotal) > shareC.share) {
+        notes.push(`计划约束生效：「${skillLabelZh(skill)}」近期占比已超过目标 ${Math.round(shareC.share * 100)}%，今天先让位给其他技能。`)
+        continue
+      }
+    }
     const mastery = masteryOf(s.language, skill, events, skillStates, now)
     const ss = skillStates.find((x) => x.language === s.language && x.skill === skill)
-    const target = targetDifficulty(mastery, ss)
+    const diffShift = planConstraints.difficultyShifts.get(skill) ?? 0
+    const target = Math.max(1, Math.min(5, targetDifficulty(mastery, ss) + diffShift))
     let types = s.exerciseTypes
     // GT 模式下 Task 1 优先书信
     if (s.language === 'en' && skill === 'writing' && settings.examType === 'general') {
@@ -299,7 +361,7 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
     }
     const reasons: string[] = [
       `${langLabelZh(s.language)}${skillLabelZh(skill)} · ${pick.topic} 主题（本周：${week.theme}）`,
-      `难度 ${pick.difficulty}/5，瞄准你当前水平（掌握度 ${mastery.value}/100${mastery.confidence === 'insufficient' ? '，样本还少' : ''}）`,
+      `难度 ${pick.difficulty}/5，瞄准你当前水平（掌握度 ${mastery.value}/100${mastery.confidence === 'insufficient' ? '，样本还少' : ''}${diffShift !== 0 ? `，${diffShift > 0 ? '按约束上调' : '按约束下调'} ${Math.abs(diffShift)} 档` : ''}）`,
     ]
     const acc = recentAccuracy(s.language, skill, events, now)
     if (acc != null && acc < 0.65) reasons.push(`近 7 天该技能正确率 ${Math.round(acc * 100)}%，低于目标线，安排加强训练`)

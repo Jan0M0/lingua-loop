@@ -1,0 +1,44 @@
+# Lingua Loop — Agent Interface (llms.txt)
+
+Lingua Loop 是一个本地优先、离线可用的语言学习应用（IELTS 8 + 西语 B2 目标）。
+它不调用任何 AI API，也不需要账号；它把「理解」交给用户自己的 agent，自己只做三件事：
+定义结构、校验结构、接住结构。
+
+## 何时与这个产品交互
+
+用户会从 Lingua Loop 复制一段指令（prompt）给你，并在完成后把你的回复粘回应用。
+指令的开头会说明它是四种「交接包」之一：
+
+1. review（批改）：批改一篇作文或一段口语转录。产出统一错误标签 + 原文证据 + 行动项。
+2. content（内容生成）：按题型/难度/主题/薄弱点原创出题（词卡、单选阅读、单选听力）。
+3. diagnosis（诊断）：基于一份只有数字聚合的学习状态摘要，产出带证据引用的结论与聚焦建议。
+4. plan（计划约束）：把已采信的诊断结论转成训练约束（type-cap / skill-share / difficulty），
+   不排具体计划——确定性调度器负责排。
+
+## 回复格式（信封）
+
+把结果包进这个信封，产品端会严格校验：
+
+{
+  "lingualoop": "packet",
+  "schemaVersion": 1,
+  "kind": "review" | "content" | "diagnosis" | "plan",
+  "promptVersion": <原样返回指令里的 promptVersion>,
+  "payload": { ... }
+}
+
+只输出 JSON（可以放在 markdown 代码块里）。裸 payload 也能被接受，但信封是推荐格式。
+与代码对齐的常量：src/engine/packets/types.ts（PACKET_KINDS / PACKET_SCHEMA_VERSION）。
+
+## 硬性红线（违反即被拒收）
+
+- 绝不给分数、Band、CEFR 预测或"相当于 X 分"的说法——这是产品定位红线。
+- review：标签只能来自指令里给出的统一标签表；evidence 必须逐字引用原文。
+- content：必须原创，禁止复制或改写真实考试题目/商业题库；id 命名与题目编号必须按指令规范。
+- diagnosis：每条结论的 evidenceRefs 必须能在摘要（digest）里解析到真实路径，解析不到直接拒收。
+- plan：约束只有三种维度；difficulty 只许 ±1；days ≤ 30；占比合计 ≤ 1。
+
+## 隐私边界
+
+摘要（digest）只有数字与聚合，不含作文、录音或答案原文。
+除用户主动复制的指令内容外，本产品不向任何地方发送数据。

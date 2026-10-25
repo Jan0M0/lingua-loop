@@ -8,6 +8,7 @@ import { recommendExplore, topicLabel } from '../engine/recommend'
 import { computeMastery } from '../engine/mastery'
 import { dayNumber, daysBetween, localDateKey, weekdayZh } from '../engine/dates'
 import { sortDue } from '../engine/srs'
+import { getMeta } from '../storage/db'
 import type { Exercise } from '../types/content'
 import { Badge, EmptyState, ProgressBar, Segmented } from '../components/ui'
 import { navigate } from '../router'
@@ -39,6 +40,18 @@ export function Today() {
 
   const [showRecapOnDemand, setShowRecapOnDemand] = useState(false)
   const [showRoute, setShowRoute] = useState(false)
+  const [diagDue, setDiagDue] = useState(false)
+  const [diagDismissed, setDiagDismissed] = useState(false)
+
+  // P6：距上次 AI 诊断 >7 天（或学了 8 天以上还没做过）→ 轻提示，可关
+  useEffect(() => {
+    void (async () => {
+      const last = await getMeta<number>('lastDiagnosisAt')
+      if (last == null) setDiagDue(day >= 8)
+      else setDiagDue(Date.now() - last > 7 * 86400000)
+    })().catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day])
 
   const recap = useMemo(() => {
     if (!allDone && !showRecapOnDemand) return null
@@ -65,6 +78,16 @@ export function Today() {
       {dueNow.length > 0 && (
         <div className="notice warn">
           ⏰ 有 <b>{dueNow.length}</b> 张词卡到期（不少来自你收藏过的表达）——顺手清一下，几分钟的事。
+        </div>
+      )}
+
+      {diagDue && !diagDismissed && (
+        <div className="notice info spread">
+          <span>🩺 有一阵子没做 AI 诊断了（每周一次就够）——去「进步」页看看你的学习状态有没有新信号。</span>
+          <span className="row">
+            <button className="btn sm" onClick={() => navigate('progress')}>去做诊断</button>
+            <button className="btn subtle sm" onClick={() => setDiagDismissed(true)}>先不</button>
+          </span>
         </div>
       )}
 

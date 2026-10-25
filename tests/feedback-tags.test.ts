@@ -30,7 +30,7 @@ describe('applyConfirmedFeedback · 外部反馈确认写入', () => {
   })
 
   it('标签写入最近一次事件，历史事件不变', async () => {
-    const out = await applyConfirmedFeedback(EX, ['tense', 'article'], ['Next time check articles.'], 9000)
+    const out = await applyConfirmedFeedback(EX, ['tense', 'article'], ['Next time check articles.'], { now: 9000 })
     expect(out.event?.id).toBe('evt-new')
     expect(out.event?.errorTags).toEqual(['tense', 'article'])
 
@@ -40,14 +40,14 @@ describe('applyConfirmedFeedback · 外部反馈确认写入', () => {
   })
 
   it('保留用户原有备注，并把行动项追加进去', async () => {
-    const out = await applyConfirmedFeedback(EX, ['tense'], ['下一步：每段检查一次时态'], 9000)
+    const out = await applyConfirmedFeedback(EX, ['tense'], ['下一步：每段检查一次时态'], { now: 9000 })
     expect(out.event?.note).toContain('旧备注：结尾没收住')
     expect(out.event?.note).toContain('外部反馈行动项')
     expect(out.event?.note).toContain('下一步：每段检查一次时态')
   })
 
   it('草稿记录已确认标签与行动项', async () => {
-    await applyConfirmedFeedback(EX, ['tense', 'spelling'], ['Next time check articles.'], 9000)
+    await applyConfirmedFeedback(EX, ['tense', 'spelling'], ['Next time check articles.'], { now: 9000 })
     const d = (await getAllDrafts()).find((x) => x.exerciseId === EX)!
     expect(d.confirmedTags).toEqual(['tense', 'spelling'])
     expect(d.actionItems).toEqual(['Next time check articles.'])
@@ -55,8 +55,8 @@ describe('applyConfirmedFeedback · 外部反馈确认写入', () => {
   })
 
   it('重复确认不产生重复标签/行动项', async () => {
-    await applyConfirmedFeedback(EX, ['tense'], ['A'], 9000)
-    const out = await applyConfirmedFeedback(EX, ['tense', 'spelling'], ['A'], 9100)
+    await applyConfirmedFeedback(EX, ['tense'], ['A'], { now: 9000 })
+    const out = await applyConfirmedFeedback(EX, ['tense', 'spelling'], ['A'], { now: 9100 })
     expect(out.event?.errorTags).toEqual(['tense', 'spelling'])
     const d = (await getAllDrafts()).find((x) => x.exerciseId === EX)!
     expect(d.actionItems).toEqual(['A'])
@@ -64,13 +64,13 @@ describe('applyConfirmedFeedback · 外部反馈确认写入', () => {
   })
 
   it('词表外的标签被过滤，不污染统计', async () => {
-    const out = await applyConfirmedFeedback(EX, ['tense', 'not-a-real-tag'], [], 9000)
+    const out = await applyConfirmedFeedback(EX, ['tense', 'not-a-real-tag'], [], { now: 9000 })
     expect(out.tags).toEqual(['tense'])
     expect(out.event?.errorTags).toEqual(['tense'])
   })
 
   it('空输入不写任何数据', async () => {
-    const out = await applyConfirmedFeedback(EX, [], [], 9000)
+    const out = await applyConfirmedFeedback(EX, [], [], { now: 9000 })
     expect(out.event).toBeNull()
     expect(out.draft).toBeNull()
     expect(out.note).toContain('未写入')
@@ -79,7 +79,7 @@ describe('applyConfirmedFeedback · 外部反馈确认写入', () => {
   })
 
   it('没有对应事件时只写草稿，并如实说明', async () => {
-    const out = await applyConfirmedFeedback(EX_NO_EVENT, ['spelling'], [], 9000)
+    const out = await applyConfirmedFeedback(EX_NO_EVENT, ['spelling'], [], { now: 9000 })
     expect(out.event).toBeNull()
     expect(out.draft?.exerciseId).toBe(EX_NO_EVENT)
     expect(out.note).toContain('草稿')

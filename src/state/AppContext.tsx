@@ -62,6 +62,8 @@ export interface AppActions {
   saveHighlightAsCard(highlight: { expression: string; glossZh: string; fromStory: string; extraExample?: string }, storyId: string): Promise<string | null>
   tomorrowPreview(): string[]
   refreshStorage(): Promise<void>
+  /** 从 IndexedDB 全量重载状态（agent 交接包 apply 之后的统一同步方式） */
+  reloadAll(): Promise<void>
 }
 
 const StateCtx = createContext<AppState | null>(null)
@@ -150,13 +152,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState((s) => (s.plan?.date === dateKey ? s : { ...s, plan: existing }))
         return existing
       }
-      const [settings, events, cardStates, skillStates, adjustments, customContent] = await Promise.all([
+      const [settings, events, cardStates, skillStates, adjustments, customContent, plans] = await Promise.all([
         db.getSettings(),
         db.getAllEvents(),
         db.getAllCardStates(),
         db.getAllSkillStates(),
         db.getAllAdjustments(),
         db.getAllCustomContent(),
+        db.getAllPlans(),
       ])
       const plan = buildDailyPlan({
         settings,
@@ -167,6 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         events,
         skillStates,
         adjustments,
+        recentPlans: plans,
       })
       // 重排不能丢失当天已完成的任务状态（设置变更触发 force 重建时）：
       // 1) 新计划中同名/同内容任务继承状态；2) 已完成但被移出新计划的（如做完的诊断）追加保留。
@@ -434,6 +438,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           events: state.events,
           skillStates: state.skillStates,
           adjustments: state.adjustments,
+          recentPlans: state.plan ? [state.plan] : [],
         })
       },
 
@@ -446,6 +451,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             /* ignore */
           }
         }
+      },
+
+      async reloadAll() {
+        await loadAll()
       },
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

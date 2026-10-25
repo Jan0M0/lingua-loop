@@ -170,7 +170,7 @@ export interface TaskFeedback {
 export interface Adjustment {
   id: string
   ts: number
-  kind: 'card-ease' | 'skill-difficulty' | 'type-deprioritize' | 'plan-note' | 'topic-boost' | 'topic-deprioritize'
+  kind: 'card-ease' | 'skill-difficulty' | 'type-deprioritize' | 'plan-note' | 'topic-boost' | 'topic-deprioritize' | 'plan-constraint'
   description: string
   /** 调整何时失效 */
   expiresAt?: number
