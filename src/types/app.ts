@@ -24,6 +24,8 @@ export interface Settings {
   interests: string[]
   /** 学语言的动机（v2 §3A.5：多选、可跳过） */
   motivations: string[]
+  /** 我的 AI 工具地址（可选）：交接包面板「复制并打开」的目标；空 = 只复制，不弹任何窗口 */
+  agentUrl: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -42,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   seedSalt: 'default',
   interests: [],
   motivations: [],
+  agentUrl: '',
 }
 
 export type SelfDifficulty = 'too-easy' | 'right' | 'too-hard'

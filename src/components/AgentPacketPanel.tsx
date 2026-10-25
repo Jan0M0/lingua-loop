@@ -4,19 +4,28 @@
 import { useRef, useState } from 'react'
 import type { PacketDef, PacketParseResult } from '../engine/packets/types'
 import { logEgress } from '../storage/egress'
-import { useActions } from '../state/AppContext'
+import { useActions, useAppState } from '../state/AppContext'
 
 interface Props<TCtx, TResult> {
   def: PacketDef<TCtx, TResult>
   ctx: TCtx
-  /** 复制后打开的 agent（默认 ChatGPT；换 Claude/Gemini 由调用方指定） */
+  /** 覆盖设置里的目标地址（一般不用传；默认读设置 agentUrl，空 = 只复制不打开） */
   agentUrl?: string
   /** 应用成功后的回调；缺省自动全量刷新应用状态 */
   onApplied?: () => void
 }
 
-export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl = 'https://chatgpt.com', onApplied }: Props<TCtx, TResult>) {
+export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl, onApplied }: Props<TCtx, TResult>) {
   const actions = useActions()
+  const state = useAppState()
+  // 目标：props 覆盖 > 设置里的「我的 AI 工具地址」> 只复制（用户粘到 WorkBuddy 等任意工具）
+  const target = (agentUrl ?? state.settings.agentUrl ?? '').trim()
+  let targetName = 'Agent'
+  try {
+    if (target) targetName = new URL(target).hostname.replace(/^www\./, '')
+  } catch {
+    targetName = 'Agent'
+  }
   const prompt = def.buildPrompt(ctx)
   const [copied, setCopied] = useState(false)
   const [raw, setRaw] = useState('')
@@ -40,11 +49,15 @@ export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl = 'https://
     setCopied(true)
     // 审计：此刻这批字段离开了设备
     void logEgress(def.kind, def.promptVersion, def.egressFields(ctx), new Blob([prompt]).size).catch(() => undefined)
-    try {
-      window.open(agentUrl, '_blank')
-      setNotice('已复制指令并打开新窗口。把指令粘贴给 agent，跑完把它的回复整段粘/拖回下面的框。')
-    } catch {
-      setNotice('已复制指令（新窗口被浏览器拦截）：手动打开你的 agent，粘贴指令，跑完把回复粘回下面。')
+    if (target) {
+      try {
+        window.open(target, '_blank')
+        setNotice(`已复制指令并打开 ${targetName}。粘贴给它，跑完把回复整段粘/拖回下面的框。`)
+      } catch {
+        setNotice('已复制指令（新窗口被浏览器拦截）：手动打开你的 AI，粘贴指令，跑完把回复粘回下面。')
+      }
+    } else {
+      setNotice('已复制指令。粘给你的 AI（WorkBuddy、ChatGPT、Claude……哪个都行），跑完把它的回复整段粘/拖回下面的框。')
     }
   }
 
@@ -105,8 +118,11 @@ export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl = 'https://
       </p>
 
       <div className="row" style={{ marginBottom: 8 }}>
-        <button className="btn primary" onClick={() => void copyPrompt()}>复制指令并打开 {agentUrl.includes('chatgpt') ? 'ChatGPT' : 'Agent'}</button>
-        <a className="btn subtle" href={agentUrl} target="_blank" rel="noreferrer">只开窗口</a>
+        <button className="btn primary" onClick={() => void copyPrompt()}>
+          {target ? `复制指令并打开 ${targetName}` : '复制指令'}
+        </button>
+        {target && <a className="btn subtle" href={target} target="_blank" rel="noreferrer">只开窗口</a>}
+        {!target && <span className="small dim">粘到 WorkBuddy / ChatGPT / Claude 等任何 AI 都行</span>}
       </div>
       <details style={{ marginBottom: 10 }}>
         <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>指令全文（{prompt.length.toLocaleString()} 字符）</summary>

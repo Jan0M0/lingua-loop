@@ -132,6 +132,18 @@ export function Settings() {
       </div>
 
       <div className="card">
+        <h2>AI 协作（批改 / 出题 / 诊断 / 计划）</h2>
+        <label className="field">
+          <span>你的 AI 工具地址（可选）</span>
+          <input type="text" placeholder="留空 = 只复制指令，不打开任何窗口" value={s.agentUrl} onChange={(e) => void actions.updateSettings({ agentUrl: e.target.value.trim() })} />
+        </label>
+        <p className="small dim">
+          四种 AI 能力都走「复制指令 → 给你的 AI 跑 → 粘回结果」三步，用哪个 AI 由你定（WorkBuddy、ChatGPT、Claude……）。
+          填了网址，面板按钮会顺手帮你打开它；<b>留空则只复制指令</b>，粘到任何工具里都行。本应用全程不联网、不调用任何 AI API。
+        </p>
+      </div>
+
+      <div className="card">
         <h2>语音与隐私</h2>
         <label className="spread" style={{ padding: '8px 0' }}>
           <span>系统语音朗读（TTS）<div className="small dim">使用操作系统语音；没有可用语音时训练自动切换为文本模式</div></span>
