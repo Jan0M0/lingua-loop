@@ -128,3 +128,20 @@
 
 ### 环境说明
 - `agent-browser` 未安装且需 500MB 下载 → 改用本机 Chrome `--headless=new --remote-debugging-port` + 自写 CDP 脚本驱动（脚本放在临时目录，不进仓库）。
+
+## 2026-10-25 · 交付体验修复：装成桌面应用，摆脱命令行
+
+**背景**：用户反馈"不太行"——日常使用还得先跑 start.cmd/终端服务，预览页还因 4322 服务未启动显示"页面加载失败"（WorkBuddy 会话结束后服务随之停止；另外早前 ZCode 侧清理端口时也误杀过 4322）。`file://` 双击方案不可行（IndexedDB 被禁），正确答案是 PWA 安装：应用本身是带 SW 的 PWA，安装后从桌面图标启动，由 SW 缓存供给，**不再需要任何本地服务**。
+
+**改动**
+- `src/hooks/usePwaInstall.ts`（新增）：捕获 `beforeinstallprompt` / `appinstalled`，检测 standalone 已安装态。
+- 设置页第一张卡片「安装为桌面应用」：可安装时给「安装到桌面」按钮；IAB/不支持时降级为指引文案（Chrome/Edge 地址栏安装图标、iOS 添加到主屏幕）；已安装后显示一句确认。装一次即可双击桌面图标离线使用。
+- `main.tsx`：请求 `navigator.storage.persist()`（安装后长期离线使用，降低浏览器清理 IndexedDB 的风险）；页面侧缓存写入后清理旧构建哈希资源（cache-first 下每次重建会无限累积——实测从 6 个旧资源清到仅当前构建）。
+- `start.cmd` 重写：中文提示；已在运行则直接开浏览器（可放心重复双击）；服务最小化到任务栏；装完桌面应用后明确告知两个窗口都可关闭；Node.js 缺失时给出安装指引。
+- `QUICKSTART.md`：上手方式改为「start.cmd → 设置页点安装 → 之后双击桌面图标，免服务免命令行」，file:// 警告保留。
+- 统一端口到 **4322**（与 start.cmd、用户现有标签页一致）；停掉 ZCode 侧遗留的 4327 服务。
+
+**验证（如实）**
+- `npm run build`（tsc --noEmit 0 错误）→ 成功；`npx vitest run` → **18 文件 / 103 测试全部通过**。
+- 浏览器实测（IAB，origin http://localhost:4322）：页面正常加载；安装卡片位于设置页首位、IAB 下正确降级为指引文案；`serviceWorker.controller` active、scope 正确；缓存仅含当前构建资源（旧 5 个已清理）；CSS 经 JS 内联 `<style>` 生效（card 12px 圆角、主题蓝按钮、系统字体）；`storage.persisted()` 在 IAB 中为 false（嵌入式浏览器不授予，真实 Chrome 安装 PWA 后通常自动授予——该调用本就是"请求"语义）。
+- 已知限制：IAB 内嵌浏览器不触发 `beforeinstallprompt`（无法在预览面板里演示"安装到桌面"按钮本身），需在系统 Chrome/Edge 中打开 http://localhost:4322 验证；SW 图标（192/512 PNG）由浏览器在安装时自行拉取，未列入 SW 缓存清单（安装动作发生在服务在线时，无影响）。

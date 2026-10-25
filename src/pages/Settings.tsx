@@ -5,6 +5,7 @@ import { applyRestore, downloadBackupFile, exportBackup, previewRestore, wipeEve
 import { Badge, Segmented } from '../components/ui'
 import { INTEREST_TOPICS } from '../types/content'
 import { topicLabel } from '../engine/recommend'
+import { usePwaInstall } from '../hooks/usePwaInstall'
 
 const MOTIVATION_LABELS: Record<string, string> = {
   travel: '旅行', 'study-work': '学习/工作', friends: '交朋友', culture: '文化',
@@ -15,6 +16,7 @@ export function Settings() {
   const state = useAppState()
   const actions = useActions()
   const s = state.settings
+  const pwa = usePwaInstall()
   const [msg, setMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingRestore = useRef<Awaited<ReturnType<typeof exportBackup>> | null>(null)
@@ -59,6 +61,20 @@ export function Settings() {
 
   return (
     <div>
+      <div className="card">
+        <h2>安装为桌面应用</h2>
+        {pwa.installed ? (
+          <p className="small dim">✅ 已安装。双击桌面/开始菜单里的「Lingua Loop」图标即可打开：独立窗口、完全离线，不再需要 start.cmd、命令行或任何本地服务。数据与本页面共用，仅保存在这台设备。</p>
+        ) : pwa.canInstall ? (
+          <div>
+            <p className="small dim">装一次，以后双击桌面图标就能离线使用——不用再保留任何命令行窗口，也不用先跑 start.cmd。</p>
+            <button className="btn primary" onClick={() => void pwa.install()}>安装到桌面</button>
+          </div>
+        ) : (
+          <p className="small dim">当前浏览器没有提供一键安装。桌面版 Chrome/Edge：点地址栏右侧的「安装」图标；iPhone/iPad 的 Safari：分享 → 添加到主屏幕。装好后双击图标即可离线使用，无需命令行。</p>
+        )}
+      </div>
+
       <div className="card">
         <h2>目标与节奏</h2>
         <label className="field">

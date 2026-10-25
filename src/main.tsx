@@ -12,6 +12,9 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>
 )
 
+// 争取持久化存储配额：长期使用/安装为桌面应用后，避免浏览器在磁盘压力下清理 IndexedDB 学习数据
+navigator.storage?.persist?.().catch(() => undefined)
+
 // 仅生产构建注册 service worker（开发模式不干扰）
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -31,6 +34,11 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
               if (u && u.startsWith(self.location.origin)) urls.add(new URL(u).pathname)
             })
           await cache.addAll([...urls])
+          // 清理旧构建遗留的哈希资源：缓存对 /assets/ 是 cache-first，不清会随每次重建无限累积
+          for (const req of await cache.keys()) {
+            const path = new URL(req.url).pathname
+            if (path.startsWith('/assets/') && !urls.has(path)) await cache.delete(req)
+          }
         } catch (err) {
           console.warn('离线资源缓存写入失败（在线功能不受影响）：', err)
         }
