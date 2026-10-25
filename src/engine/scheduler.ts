@@ -249,7 +249,7 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
         estMinutes: Math.max(3, picked.length),
         reasons: [
           `新词卡 ${picked.length} 张（本周主题：${week.theme}）`,
-          `当前${langLabelZh(s.language)}词库累计已引入 ${seenCards.size ? Array.from(seenCards).filter((x) => x.startsWith(s.language === 'en' ? 'en-' : 'es-')).length : 0} 张`,
+          `计划生成时${langLabelZh(s.language)}词库已引入 ${seenCards.size ? Array.from(seenCards).filter((x) => x.startsWith(s.language === 'en' ? 'en-' : 'es-')).length : 0} 张，循序渐进不贪多`,
         ],
         status: 'pending',
         lowLoad: true,

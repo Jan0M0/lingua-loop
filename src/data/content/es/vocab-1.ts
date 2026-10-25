@@ -864,7 +864,7 @@ export const items: VocabCard[] = [
       { sentence: 'Vivo en un piso pequeño cerca del centro.', zh: '我住在市中心附近一间小公寓。' },
       { sentence: 'Mi oficina está en el segundo piso.', zh: '我的办公室在三楼（西语"二层"）。' },
     ],
-    commonError: 'piso 多义词："公寓"（西班牙用法；拉美说 el apartamento / el departamento）和"楼层"。楼层计数：el primer piso 按中式数法是"三楼"？"不是——是二楼"；地面层叫 la planta baja，从 planta baja 往上一层才是 primer piso。',
+    commonError: 'piso 多义词："公寓"（西班牙用法；拉美说 el apartamento / el departamento）和"楼层"。楼层计数与中文差一层：地面层叫 la planta baja，往上第一层才是 el primer piso（相当于中文的"二楼"）。',
     register: '中性',
   },
   {
@@ -1123,7 +1123,7 @@ export const items: VocabCard[] = [
       { sentence: 'No pueden entrar con el perro.', zh: '他们不能带狗进。' },
       { sentence: 'Mañana puedo ayudarte.', zh: '明天我能帮你。' },
     ],
-    commonError: '变位 o→ue：puedo, puedes（*podo 误）。后接动词原形（puedo hablar），不加介词；请求许可用 ¿Puedo...? 即可，礼貌不需加 *por favor 在动词前。',
+    commonError: '变位 o→ue：puedo, puedes（*podo 误）。后接动词原形（puedo hablar），中间不加介词；请求许可说 ¿Puedo...?，句尾可加 por favor。',
     register: '中性',
   },
   {

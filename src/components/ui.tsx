@@ -59,16 +59,18 @@ export function MiniBars({ data, height = 60, format }: { data: { label: string;
   if (data.length === 0) return null
   const max = Math.max(...data.map((d) => d.value), 1)
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: height + 24 }}>
-      {data.map((d) => (
-        <div key={d.label} style={{ flex: 1, textAlign: 'center', minWidth: 28 }}>
-          <div title={format ? format(d.value) : String(d.value)} style={{
-            height: `${Math.max(3, (d.value / max) * height)}px`,
-            background: 'var(--accent)', borderRadius: '4px 4px 0 0', opacity: 0.85,
-          }} />
-          <div className="small dim" style={{ fontSize: 11 }}>{d.label}</div>
-        </div>
-      ))}
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: height + 24, minWidth: 'fit-content' }}>
+        {data.map((d) => (
+          <div key={d.label} style={{ flex: 1, textAlign: 'center', minWidth: 28 }}>
+            <div title={format ? format(d.value) : String(d.value)} style={{
+              height: `${Math.max(3, (d.value / max) * height)}px`,
+              background: 'var(--accent)', borderRadius: '4px 4px 0 0', opacity: 0.85,
+            }} />
+            <div className="small dim" style={{ fontSize: 11 }}>{d.label}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
