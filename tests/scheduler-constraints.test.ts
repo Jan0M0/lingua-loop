@@ -2,6 +2,7 @@
 // 写作槽在第 6 天配方（day 6），阅读槽在第 4 天（day 4）——测试日期据此选择。
 import { describe, expect, it } from 'vitest'
 import { buildDailyPlan, readPlanConstraints } from '../src/engine/scheduler'
+import { newCardState } from '../src/engine/srs'
 import type { Adjustment, CardState, DailyPlan, LearningEvent, Settings, SkillState } from '../src/types/app'
 import { DEFAULT_SETTINGS } from '../src/types/app'
 import type { Exercise, ReadingExercise, VocabCard, WritingExercise } from '../src/types/content'
@@ -114,5 +115,41 @@ describe('difficulty 偏移约束（第 4 天：阅读槽）', () => {
     const readingTask = p.tasks.find((t) => t.kind === 'exercise' && t.skill === 'reading')
     expect(readingTask).toBeTruthy()
     expect(readingTask!.reasons.join(' ')).toContain('按约束上调 1 档')
+  })
+})
+
+describe('单语言模式（配比 100/0）', () => {
+  it('priorityEn=100：计划里没有任何西语任务，并有明确说明', () => {
+    const p = buildDailyPlan({
+      settings: settings({ priorityEn: 100 }), dateKey: DAY6, now: NOW6, cardStates: [],
+      allExercises: pool(), events: [], skillStates: [], adjustments: [],
+    })
+    expect(p.tasks.some((t) => t.language === 'es')).toBe(false)
+    expect(p.tasks.some((t) => t.language === 'en')).toBe(true)
+    expect(p.notes.join(' ')).toContain('西语已停用')
+  })
+
+  it('到期的西语卡不进复习队列（数据保留，随时改回）', () => {
+    const cards: CardState[] = [
+      { ...newCardState('es-voc-001', NOW6 - 10 * 86400000), dueAt: NOW6 - 1000 },
+      { ...newCardState('en-voc-001', NOW6 - 10 * 86400000), dueAt: NOW6 - 2000 },
+    ]
+    const p = buildDailyPlan({
+      settings: settings({ priorityEn: 100 }), dateKey: DAY6, now: NOW6, cardStates: cards,
+      allExercises: pool(), events: [], skillStates: [], adjustments: [],
+    })
+    const srs = p.tasks.filter((t) => t.kind === 'srs-review')
+    expect(srs.length).toBeGreaterThan(0)
+    expect(srs.every((t) => t.language === 'en')).toBe(true)
+    expect(srs.some((t) => t.contentIds?.includes('es-voc-001'))).toBe(false)
+  })
+
+  it('priorityEn=0：镜像成立（只学西语）', () => {
+    const p = buildDailyPlan({
+      settings: settings({ priorityEn: 0 }), dateKey: DAY6, now: NOW6, cardStates: [],
+      allExercises: pool(), events: [], skillStates: [], adjustments: [],
+    })
+    expect(p.tasks.some((t) => t.language === 'en')).toBe(false)
+    expect(p.notes.join(' ')).toContain('英语已停用')
   })
 })

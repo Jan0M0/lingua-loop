@@ -93,10 +93,14 @@ export function Onboarding() {
       body: (
         <>
           <label className="field">
-            <span>英语 {priorityEn}% ／ 西语 {100 - priorityEn}%</span>
-            <input type="range" min="10" max="90" step="10" value={priorityEn} onChange={(e) => setPriorityEn(Number(e.target.value))} style={{ width: '100%' }} />
+            <span>
+              英语 {priorityEn}% ／ 西语 {100 - priorityEn}%
+              {priorityEn >= 100 && <> · <b>只学英语</b></>}
+              {priorityEn <= 0 && <> · <b>只学西语</b></>}
+            </span>
+            <input type="range" min="0" max="100" step="10" value={priorityEn} onChange={(e) => setPriorityEn(Number(e.target.value))} style={{ width: '100%' }} />
           </label>
-          <p className="small dim">默认 70/30。影响每天两类任务的配比，随时可改。</p>
+          <p className="small dim">默认 70/30。拉到 100% 可完全跳过西语（随时在设置里改）。</p>
         </>
       ),
     },

@@ -98,7 +98,7 @@ export function Today() {
           onKeyDown={(e) => { if (e.key === 'Enter') setShowRoute(!showRoute) }}>
           <div>
             <b>🧭 沿着我的长期路线</b>
-            <span className="small dim"> IELTS 8 + 西语 B2 的系统训练{plan ? ` · 今日 ${plan.tasks.filter(t => t.status === 'done').length}/${plan.tasks.length} 项` : ''}</span>
+            <span className="small dim"> {state.settings.priorityEn >= 100 ? 'IELTS 8 的系统训练' : state.settings.priorityEn <= 0 ? '西语 B2 的系统训练' : 'IELTS 8 + 西语 B2 的系统训练'}{plan ? ` · 今日 ${plan.tasks.filter(t => t.status === 'done').length}/${plan.tasks.length} 项` : ''}</span>
           </div>
           <span className="small dim">{showRoute ? '收起 ▴' : '展开 ▾'}</span>
         </div>
@@ -189,9 +189,17 @@ export function Today() {
 function ExploreCard({ nextTask, dueCount }: { nextTask?: PlannedTask; dueCount: number }) {
   const state = useAppState()
   const actions = useActions()
-  const [lang, setLang] = useState<'en' | 'es'>(state.settings.priorityEn >= 50 ? 'en' : 'es')
+  const [lang, setLang] = useState<'en' | 'es'>(state.settings.priorityEn <= 0 ? 'es' : 'en')
   const [excluded, setExcluded] = useState<string[]>([])
   const [reseed, setReseed] = useState(0)
+  const esOff = state.settings.priorityEn >= 100
+  const enOff = state.settings.priorityEn <= 0
+
+  // 单语言模式：当前语言被停用时自动切到另一边
+  useEffect(() => {
+    if (lang === 'es' && esOff) setLang('en')
+    if (lang === 'en' && enOff) setLang('es')
+  }, [lang, esOff, enOff])
 
   const targetDifficulty = useMemo(() => {
     const ss = state.skillStates.find((x) => x.language === lang && x.skill === 'reading')
@@ -254,7 +262,10 @@ function ExploreCard({ nextTask, dueCount }: { nextTask?: PlannedTask; dueCount:
   return (
     <div className="card" style={{ borderColor: 'var(--accent)' }}>
       <div className="spread" style={{ marginBottom: 8 }}>
-        <Segmented value={lang} onChange={setLang} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
+        <Segmented value={lang} onChange={setLang} options={[
+          ...(enOff ? [] : [{ value: 'en' as const, label: 'English' }]),
+          ...(esOff ? [] : [{ value: 'es' as const, label: 'Español' }]),
+        ]} />
         {dueCount > 0 && <span className="small dim">{dueCount} 张卡到期</span>}
       </div>
 

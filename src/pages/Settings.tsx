@@ -100,8 +100,13 @@ export function Settings() {
           <input type="range" min="15" max="120" step="15" value={s.dailyMinutes} onChange={(e) => void actions.updateSettings({ dailyMinutes: Number(e.target.value) })} style={{ width: '100%' }} />
         </label>
         <label className="field">
-          <span>英语 / 西语配比：{s.priorityEn}% / {100 - s.priorityEn}%</span>
-          <input type="range" min="10" max="90" step="10" value={s.priorityEn} onChange={(e) => void actions.updateSettings({ priorityEn: Number(e.target.value) })} style={{ width: '100%' }} />
+          <span>
+            英语 / 西语配比：{s.priorityEn}% / {100 - s.priorityEn}%
+            {s.priorityEn >= 100 && <> · <b>只学英语（西语已停用）</b></>}
+            {s.priorityEn <= 0 && <> · <b>只学西语（英语已停用）</b></>}
+          </span>
+          <input type="range" min="0" max="100" step="10" value={s.priorityEn} onChange={(e) => void actions.updateSettings({ priorityEn: Number(e.target.value) })} style={{ width: '100%' }} />
+          <div className="small dim">拉到 <b>100%</b> = 完全不学西语（排题、复习、探索全部跳过西语，数据保留，随时改回）；0% 反之。</div>
         </label>
         <label className="field">
           <span>应用名称</span>

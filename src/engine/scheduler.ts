@@ -173,9 +173,12 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
   let used = 0
   const reviewCap = mode === 'minimum' ? Math.min(16, budget / REVIEW_MINUTES_PER_CARD) : Math.min(30, Math.ceil(budget * 0.4) / REVIEW_MINUTES_PER_CARD)
   for (const lang of ['en', 'es'] as Language[]) {
+    // 配比 100/0 = 该语言完全停用：到期卡不进队列，数据保留
+    const share = lang === 'en' ? settings.priorityEn / 100 : 1 - settings.priorityEn / 100
+    if (share <= 0) continue
     const due = sortDue(cardStates.filter((s) => s.id.startsWith(lang === 'en' ? 'en-' : 'es-')), now)
     if (due.length === 0) continue
-    const take = due.slice(0, Math.ceil(reviewCap * (lang === 'en' ? settings.priorityEn / 100 : 1 - settings.priorityEn / 100) || 1))
+    const take = due.slice(0, Math.max(1, Math.ceil(reviewCap * share)))
     const ids = take.map((s) => s.id)
     if (ids.length === 0) continue
     const est = Math.max(2, Math.round(ids.length * REVIEW_MINUTES_PER_CARD))
@@ -223,8 +226,25 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
   const seenCards = new Set(cardStates.map((s) => s.id))
   const batchSize = input.vocabBatchSize ?? 8
   let slotIdx = 0
+  let esSkipped = false
+  let enSkipped = false
 
   for (const s of slots) {
+    // 单语言模式：停用的语言的槽整体跳过（配方、诊断、新词、检查点都覆盖）
+    if (s.language === 'es' && settings.priorityEn >= 100) {
+      if (!esSkipped) {
+        notes.push('西语已停用（英/西配比 100/0）：不安排任何西语内容；已有西语数据全部保留，随时在设置里改回。')
+        esSkipped = true
+      }
+      continue
+    }
+    if (s.language === 'en' && settings.priorityEn <= 0) {
+      if (!enSkipped) {
+        notes.push('英语已停用（英/西配比 0/100）：不安排任何英语内容；已有数据保留，随时改回。')
+        enSkipped = true
+      }
+      continue
+    }
     if (mode === 'minimum' && used >= budget) break
     if (used + s.minutes > budget + 4) continue // 超预算的槽跳过（srs 已置顶）
     const rng = seededRandom(taskSeq(dateKey, settings.seedSalt, slotIdx++))
@@ -386,9 +406,13 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
     tasks.sort((a, b) => Number(b.lowLoad ?? false) - Number(a.lowLoad ?? false))
   }
 
-  // 7) 保底日兜底：至少 1 个任务
+  // 7) 保底日兜底：至少 1 个任务（尊重停用的语言）
   if (tasks.length === 0) {
-    const anyVocab = allExercises.find((e) => e.type === 'vocab-card')
+    const esOff = settings.priorityEn >= 100
+    const enOff = settings.priorityEn <= 0
+    const anyVocab = allExercises.find(
+      (e) => e.type === 'vocab-card' && (esOff ? e.language === 'en' : enOff ? e.language === 'es' : true)
+    )
     if (anyVocab) {
       tasks.push({
         id: `fallback-${dateKey}`,

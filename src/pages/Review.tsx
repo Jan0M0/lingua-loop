@@ -12,9 +12,20 @@ export function Review() {
   const state = useAppState()
   const [active, setActive] = useState<PlannedTask | null>(null)
 
-  const due = useMemo(() => sortDue(state.cardStates, Date.now()), [state.cardStates])
-  const upcoming7 = upcomingDue(state.cardStates, 7)
-  const wrongExercises = useMemo(() => errorRetrainSet(state.events, state.allExercises), [state.events, state.allExercises])
+  const esOff = state.settings.priorityEn >= 100
+  const enOff = state.settings.priorityEn <= 0
+  const langOk = (id: string) => (esOff ? !id.startsWith('es-') : enOff ? !id.startsWith('en-') : true)
+  const due = useMemo(
+    () => sortDue(state.cardStates, Date.now()).filter((c) => langOk(c.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.cardStates, esOff, enOff],
+  )
+  const upcoming7 = upcomingDue(state.cardStates.filter((c) => langOk(c.id)), 7)
+  const wrongExercises = useMemo(
+    () => errorRetrainSet(state.events, state.allExercises).filter((e) => (esOff ? e.language === 'en' : enOff ? e.language === 'es' : true)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.events, state.allExercises, esOff, enOff],
+  )
 
   if (active) return <TaskRunner task={active} fromReview />
 
@@ -42,6 +53,13 @@ export function Review() {
 
   return (
     <div>
+      {(esOff || enOff) && (
+        <div className="notice info">
+          {esOff
+            ? '西语已停用（设置里配比 100/0）：西语卡片和错题不再进入复习队列，数据已保留，随时可改回。'
+            : '英语已停用（设置里配比 0/100）：英语卡片和错题不再进入复习队列，数据已保留，随时可改回。'}
+        </div>
+      )}
       <div className="card">
         <h2>到期复习</h2>
         {due.length === 0 ? (
