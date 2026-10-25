@@ -131,8 +131,15 @@ function buildPrompt(ctx: ContentCtx): string {
   lines.push(typeExample(ctx))
   lines.push('')
   if (ctx.avoidIds.length) {
-    lines.push(`【已存在的 id（禁止重复，也别出同题干换皮的题）】`)
-    lines.push(ctx.avoidIds.join(' '))
+    // 不贴全量 id 清单（上百条会稀释指令）：按前缀给"已存在最大编号 + 起始号"，更不易撞号
+    const maxNum = new Map<string, number>()
+    for (const id of ctx.avoidIds) {
+      const m = /^(.*?)(\d+)$/.exec(id)
+      if (!m) continue
+      maxNum.set(m[1], Math.max(maxNum.get(m[1]) ?? 0, Number(m[2])))
+    }
+    const parts = [...maxNum.entries()].map(([p, n]) => `${p}已有编号到 ${n}，新内容编号从 ${n + 1} 开始`)
+    lines.push(`【id 编号（防撞号）】${parts.join('；')}。不复用旧号，也不出同题干换皮的题。`)
     lines.push('')
   }
   lines.push('标签表（题目的 errorTags 只能从中选）：spelling register fluency coherence vocabulary structure main-idea detail inference writer-attitude paraphrase synonym tense agreement word-form article preposition pronoun connector punctuation relative-clause conditional collocation word-choice meaning ser-estar gender-number conjugation subjunctive accent pronunciation self-correction range')

@@ -73,7 +73,7 @@ function buildPrompt(ctx: ReviewCtx): string {
   return lines.join('\n')
 }
 
-function parse(raw: string) {
+function parse(raw: string, ctx: ReviewCtx) {
   const res = unwrapEnvelope<unknown>(raw, 'review')
   if ('error' in res) return { warnings: [], error: res.error }
   const warnings = [...res.warnings]
@@ -81,6 +81,9 @@ function parse(raw: string) {
   if (data == null || typeof data !== 'object' || !Array.isArray(data.candidates)) {
     return { warnings, error: '返回的 JSON 里没有 candidates 数组。' }
   }
+  // 逐字引用校验：evidence 必须能在原文中找到（空白差异容忍），防 agent 改写/编造引用
+  const norm = (x: string) => x.replace(/\s+/g, ' ').trim()
+  const sourceNorm = norm(ctx.sourceText)
   const candidates: { tag: ErrorTag; evidence: string }[] = []
   const seen = new Set<string>()
   for (const c of data.candidates) {
@@ -92,6 +95,10 @@ function parse(raw: string) {
     }
     if (typeof evidence !== 'string' || evidence.trim().length < 2) {
       warnings.push(`忽略标签 ${tag}：没有引用原文证据（evidence）。`)
+      continue
+    }
+    if (sourceNorm.length > 0 && !sourceNorm.includes(norm(evidence))) {
+      warnings.push(`拒收标签 ${tag}：evidence「${evidence.trim().slice(0, 30)}」未在原文中找到（agent 可能改写或编造了引用）。`)
       continue
     }
     if (seen.has(tag)) continue

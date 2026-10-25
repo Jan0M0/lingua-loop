@@ -316,7 +316,32 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
     }
 
     // exercise 槽
-    const skill = s.skill ?? 'reading'
+    let skill = s.skill ?? 'reading'
+    // P4 skill-share 补短板：目标技能占比不足且今天还没安排 → 用这个槽补一次。
+    // 只换技能不换槽位时长（预算不变）；内容选择复用本槽同一个 seededRandom 种子，确定性不破。
+    let swappedFrom: string | null = null
+    for (const [uSkill, uShare] of planConstraints.skillShares) {
+      if (uSkill === skill) break // 槽本身就是目标技能，无需换
+      const uPlans = (input.recentPlans ?? []).filter((p) => p.generatedAt >= uShare.since)
+      const uCount =
+        uPlans.reduce((n, p) => n + p.tasks.filter((t) => t.kind === 'exercise' && t.skill === uSkill).length, 0) +
+        tasks.filter((t) => t.kind === 'exercise' && t.skill === uSkill).length
+      const uTotal =
+        uPlans.reduce((n, p) => n + p.tasks.filter((t) => t.kind === 'exercise').length, 0) +
+        tasks.filter((t) => t.kind === 'exercise').length
+      const currentShare = uTotal > 0 ? uCount / uTotal : 0
+      if (currentShare < uShare.share - 0.1 && !tasks.some((t) => t.kind === 'exercise' && t.skill === uSkill)) {
+        const hasContent = allExercises.some((e) => e.language === s.language && e.skill === uSkill && !depriTypes.has(e.type))
+        if (hasContent) {
+          notes.push(
+            `计划约束生效：「${skillLabelZh(uSkill)}」目标占比 ${Math.round(uShare.share * 100)}%，当前 ${Math.round(currentShare * 100)}%，今天把一次${skillLabelZh(skill)}训练换成${skillLabelZh(uSkill)}补强。`
+          )
+          swappedFrom = skill
+          skill = uSkill
+        }
+        break
+      }
+    }
     // P4 计划约束（诊断→约束→调度器在边界内照常确定性排）
     const cap = planConstraints.typeCaps.get(skill)
     if (cap) {
@@ -345,7 +370,7 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
     const ss = skillStates.find((x) => x.language === s.language && x.skill === skill)
     const diffShift = planConstraints.difficultyShifts.get(skill) ?? 0
     const target = Math.max(1, Math.min(5, targetDifficulty(mastery, ss) + diffShift))
-    let types = s.exerciseTypes
+    let types = swappedFrom != null ? undefined : s.exerciseTypes
     // GT 模式下 Task 1 优先书信
     if (s.language === 'en' && skill === 'writing' && settings.examType === 'general') {
       types = ['writing-task']
@@ -386,6 +411,7 @@ export function buildDailyPlan(input: SchedulerInput): DailyPlan {
     const acc = recentAccuracy(s.language, skill, events, now)
     if (acc != null && acc < 0.65) reasons.push(`近 7 天该技能正确率 ${Math.round(acc * 100)}%，低于目标线，安排加强训练`)
     if (mastery.staleDays != null && mastery.staleDays >= 5) reasons.push(`${mastery.staleDays} 天没有练过这个技能`)
+    if (swappedFrom != null) reasons.push(`按计划约束补强：这个槽原本安排${skillLabelZh(swappedFrom)}，换成了${skillLabelZh(skill)}`)
     tasks.push({
       id: `ex-${s.language}-${pick.id}-${dateKey}`,
       kind: 'exercise',

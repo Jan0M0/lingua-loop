@@ -51,10 +51,23 @@ export function Progress() {
   )
 
   const latestDiag = diagnoses[0]
-  const acceptedFindings = (latestDiag?.findings ?? []).filter((f) => f.status === 'accepted')
-  const existingConstraints = state.adjustments
-    .filter((a) => a.kind === 'plan-constraint' && (a.expiresAt == null || a.expiresAt > now))
-    .map((a) => a.payload as unknown as PlanConstraint)
+  const acceptedFindings = useMemo(
+    () => (diagnoses[0]?.findings ?? []).filter((f) => f.status === 'accepted'),
+    [diagnoses],
+  )
+  const existingConstraints = useMemo(
+    () => state.adjustments
+      .filter((a) => a.kind === 'plan-constraint' && (a.expiresAt == null || a.expiresAt > now))
+      .map((a) => a.payload as unknown as PlanConstraint),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.adjustments, now],
+  )
+  // 交接包 ctx 稳定化：面板的 prompt 构建（含 digest 序列化）只在真变化时重算
+  const diagnosisCtx = useMemo(() => ({ digest }), [digest])
+  const planCtx = useMemo(
+    () => ({ digest, acceptedFindings, existingConstraints }),
+    [digest, acceptedFindings, existingConstraints],
+  )
 
   const toggleFinding = async (idx: number) => {
     if (!latestDiag) return
@@ -154,7 +167,7 @@ export function Progress() {
         {showDiagPanel && (
           <AgentPacketPanel
             def={diagnosisPacket}
-            ctx={{ digest }}
+            ctx={diagnosisCtx}
             onApplied={async () => {
               await loadDiagnoses()
               await actions.reloadAll()
@@ -198,7 +211,7 @@ export function Progress() {
               <div style={{ marginTop: 8 }}>
                 <AgentPacketPanel
                   def={planPacket}
-                  ctx={{ digest, acceptedFindings, existingConstraints }}
+                  ctx={planCtx}
                   onApplied={async () => {
                     await actions.reloadAll()
                     await actions.ensureTodayPlan(true)

@@ -1,7 +1,7 @@
 // Agent 交接包通用面板：① 复制指令 ② 交给用户自己的 agent 跑 ③ 粘回/拖回结果 → 本地校验 → 预览 → 应用。
 // 四种包（批改/内容/诊断/计划）共用这一个外壳；理解在 agent 那边，本产品只定义结构、校验结构、接住结构。
 // 隐私口径：复制即审计（记字段名与大小，不记内容）；失败时 agent 原文保留不清空；应用前必预览。
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { PacketDef, PacketParseResult } from '../engine/packets/types'
 import { logEgress } from '../storage/egress'
 import { useActions, useAppState } from '../state/AppContext'
@@ -26,7 +26,9 @@ export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl, onApplied 
   } catch {
     targetName = 'Agent'
   }
-  const prompt = def.buildPrompt(ctx)
+  // prompt 构建有成本（digest JSON.stringify、长指令拼接）：只在 def/ctx 真正变化时重建。
+  // 调用方需用 useMemo 稳定 ctx，否则每次按键重渲染都会重算。
+  const prompt = useMemo(() => def.buildPrompt(ctx), [def, ctx])
   const [copied, setCopied] = useState(false)
   const [raw, setRaw] = useState('')
   const [parsed, setParsed] = useState<PacketParseResult<TResult> | null>(null)
@@ -40,15 +42,15 @@ export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl, onApplied 
   const steps = ['① 复制指令', '② 交给你的 AI', '③ 粘回结果', '④ 完成']
 
   const copyPrompt = async () => {
+    // 审计：复制动作发起即记（宁可多记一次失败的尝试，也不漏记真实出设备的数据）
+    void logEgress(def.kind, def.promptVersion, def.egressFields(ctx), new Blob([prompt]).size).catch(() => undefined)
     try {
       await navigator.clipboard.writeText(prompt)
     } catch {
-      setNotice('复制失败（浏览器拒绝了剪贴板权限）：展开「指令全文」手动全选复制即可。')
+      setNotice('复制失败（浏览器拒绝了剪贴板权限）：展开「指令全文」手动全选复制即可。注意：手动复制不计入导出审计。')
       return
     }
     setCopied(true)
-    // 审计：此刻这批字段离开了设备
-    void logEgress(def.kind, def.promptVersion, def.egressFields(ctx), new Blob([prompt]).size).catch(() => undefined)
     if (target) {
       try {
         window.open(target, '_blank')
@@ -125,7 +127,7 @@ export function AgentPacketPanel<TCtx, TResult>({ def, ctx, agentUrl, onApplied 
         {!target && <span className="small dim">粘到 WorkBuddy / ChatGPT / Claude 等任何 AI 都行</span>}
       </div>
       <details style={{ marginBottom: 10 }}>
-        <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>指令全文（{prompt.length.toLocaleString()} 字符）</summary>
+        <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>指令全文（{prompt.length.toLocaleString()} 字符 · 从这里手动复制不计入审计）</summary>
         <pre className="mono" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', fontSize: 12, background: 'var(--bg-2, #f6f7f9)', padding: 8, borderRadius: 8 }}>{prompt}</pre>
       </details>
 

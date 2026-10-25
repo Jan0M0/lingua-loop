@@ -1,6 +1,6 @@
 // 口语运行器：准备倒计时 → 录音/计时 → 回放/自评 → 落库（done 阶段）→ AI 批改（可选）→ 返回
 // 录音永不自动上传：导出是用户主动动作；AI 批改只吃「转录文本」，不吃音频。
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LearningEvent, PlannedTask } from '../types/app'
 import type { SpeakingExercise } from '../types/content'
 import { useActions, useAppState } from '../state/AppContext'
@@ -29,6 +29,19 @@ export function SpeakingRunner({ task, onFinish }: { task: PlannedTask; onFinish
   const urlRef = useRef<string | null>(null)
 
   const supported = recordingSupported()
+
+  // 交接包 ctx 用 useMemo 稳定（面板避免无谓重建 prompt）
+  const reviewCtx = useMemo(
+    () =>
+      ex
+        ? {
+            language: ex.language, skill: 'speaking' as const, exerciseId: ex.id, taskTitle: ex.title,
+            taskPrompt: ex.prompt, sourceText: transcript,
+            checklist: ex.selfEvalDimensions.map((d) => d.dimension),
+          }
+        : null,
+    [ex, transcript],
+  )
 
   useEffect(() => {
     if (phase !== 'prep' || secondsLeft <= 0) return
@@ -211,19 +224,9 @@ export function SpeakingRunner({ task, onFinish }: { task: PlannedTask; onFinish
                   流程：导出录音 → 交给你的多模态 agent 转写 → 把转录文本存进复盘文字（上面「保存复盘文字」）→ 点下面的批改。
                   结果按统一错误标签写入这次口语记录，<b>不给分、不猜等级</b>；音频本身永远不经本应用上传。
                 </p>
-                <AgentPacketPanel
-                  def={reviewPacket}
-                  ctx={{
-                    language: ex.language,
-                    skill: 'speaking',
-                    exerciseId: ex.id,
-                    taskTitle: ex.title,
-                    taskPrompt: ex.prompt,
-                    sourceText: transcript,
-                    checklist: ex.selfEvalDimensions.map((d) => d.dimension),
-                  }}
-                  onApplied={() => void actions.reloadAll()}
-                />
+                {reviewCtx && (
+                  <AgentPacketPanel def={reviewPacket} ctx={reviewCtx} onApplied={() => void actions.reloadAll()} />
+                )}
               </>
             ) : (
               <div>

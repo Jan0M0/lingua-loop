@@ -31,10 +31,24 @@ describe('批改包 parse', () => {
   })
 
   it('词表外的标签被忽略并告警', () => {
-    const raw = JSON.stringify({ candidates: [{ tag: 'made-up-tag', evidence: 'xxx' }, { tag: 'spelling', evidence: 'topik' }], actions: [] })
+    const raw = JSON.stringify({ candidates: [{ tag: 'made-up-tag', evidence: 'People has' }, { tag: 'spelling', evidence: 'topic' }], actions: [] })
     const r = reviewPacket.parse(raw, ctx)
     expect(r.value!.candidates.map((c) => c.tag)).toEqual(['spelling'])
     expect(r.warnings.join(' ')).toContain('made-up-tag')
+  })
+
+  it('evidence 逐字校验：改写/编造的引用被拒收', () => {
+    const raw = JSON.stringify({
+      candidates: [
+        { tag: 'agreement', evidence: 'People have different views' }, // 原文是 has，不是 have
+        { tag: 'spelling', evidence: '句子根本不存在于原文中' },
+        { tag: 'tense', evidence: 'about this topic' }, // 真实子串
+      ],
+      actions: [],
+    })
+    const r = reviewPacket.parse(raw, ctx)
+    expect(r.value!.candidates.map((c) => c.tag)).toEqual(['tense'])
+    expect(r.warnings.join(' ')).toContain('未在原文中找到')
   })
 
   it('没有引用原文证据的候选被拒', () => {

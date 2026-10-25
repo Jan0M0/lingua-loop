@@ -63,13 +63,14 @@ describe('内容包 parse', () => {
     expect(r.error).toContain('explanation')
   })
 
-  it('prompt 内嵌 ID 命名规范、难度锚点、原创红线与已存在 id', () => {
+  it('prompt 内嵌 ID 命名规范、难度锚点、原创红线与下一编号', () => {
     const p = contentPacket.buildPrompt(ctx(['en-voc-001', 'en-voc-002']))
     expect(p).toContain('en-voc-')
     expect(p).toContain('Band 6–7')
     expect(p).toContain('不得复制')
-    expect(p).toContain('en-voc-001')
+    expect(p).toContain('编号从 3 开始')
     expect(p).toContain('证据')
+    expect(p).not.toContain('en-voc-001 en-voc-002') // 不再贴全量 id 清单
   })
 })
 

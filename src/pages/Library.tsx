@@ -50,14 +50,15 @@ export function Library() {
     }).slice(0, 100)
   }, [state.allExercises, q, langF, typeF, sourceF])
 
-  // AI 出题上下文：薄弱标签自动带出，avoidIds = 同语言同类型的全部现有 id（防撞号）
+  // AI 出题上下文：薄弱标签自动带出，avoidIds = 同语言同类型的全部现有 id（防撞号；prompt 里压缩成"下一个编号"）
   const weakTags = useMemo(() => {
     const m = new Map<string, number>()
     for (const e of state.events) for (const t of e.errorTags) m.set(t, (m.get(t) ?? 0) + 1)
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t as ErrorTag)
   }, [state.events])
 
-  const genCtx: ContentCtx = {
+  // useMemo 稳定 ctx：面板只在真变化时重建 prompt
+  const genCtx = useMemo<ContentCtx>(() => ({
     language: genLang,
     type: genType,
     difficulty: genDiff,
@@ -65,7 +66,7 @@ export function Library() {
     topic: genTopic.trim() || undefined,
     focusTags: weakTags,
     avoidIds: state.allExercises.filter((e) => e.language === genLang && e.type === genType).map((e) => e.id),
-  }
+  }), [genLang, genType, genDiff, genCount, genTopic, weakTags, state.allExercises])
 
   const onFile = async (file: File) => {
     setImportMsg('')

@@ -5,7 +5,7 @@ import { buildDailyPlan, readPlanConstraints } from '../src/engine/scheduler'
 import { newCardState } from '../src/engine/srs'
 import type { Adjustment, CardState, DailyPlan, LearningEvent, Settings, SkillState } from '../src/types/app'
 import { DEFAULT_SETTINGS } from '../src/types/app'
-import type { Exercise, ReadingExercise, VocabCard, WritingExercise } from '../src/types/content'
+import type { Exercise, ListeningExercise, ReadingExercise, VocabCard, WritingExercise } from '../src/types/content'
 
 const START = '2026-10-25'
 const DAY6 = '2026-10-30' // 第 6 天：配方含写作槽
@@ -44,9 +44,26 @@ function writing(id: string): WritingExercise {
   }
 }
 
+function listening(id: string, difficulty: 1 | 2 | 3 | 4 | 5): ListeningExercise {
+  return {
+    id, language: 'en', skill: 'listening', type: 'listening', topic: 'travel', difficulty,
+    estimatedMinutes: 5, tags: ['travel'], createdAt: START, contentVersion: 1, source: 'original',
+    title: 'L', titleZh: '听力', setting: '场景', transcriptMode: 'after',
+    script: [
+      { speaker: 'A', line: 'Hi.' }, { speaker: 'B', line: 'Hello.' },
+      { speaker: 'A', line: 'Where are you going?' }, { speaker: 'B', line: 'To the station.' },
+    ],
+    questions: [
+      { id: `${id}-q1`, stem: 'Q1?', options: ['a', 'b', 'c'], answerIndex: 0, explanation: '脚本末行说去车站，故 a 正确；b/c 与脚本不符。', errorTags: ['detail'] },
+      { id: `${id}-q2`, stem: 'Q2?', options: ['a', 'b', 'c'], answerIndex: 1, explanation: '脚本第二行是问候，故 b 正确；a/c 无依据。', errorTags: ['detail'] },
+    ],
+  }
+}
+
 function pool(): Exercise[] {
   return [vocab('en-voc-001'), vocab('en-voc-002'), vocab('es-voc-001'), vocab('es-voc-002'),
-    reading('en-read-001', 2), reading('en-read-002', 4), writing('en-w-001'), writing('en-w-002')]
+    reading('en-read-001', 2), reading('en-read-002', 4), writing('en-w-001'), writing('en-w-002'),
+    listening('en-ls-001', 3), listening('en-ls-002', 4)]
 }
 
 function capAdj(now: number, over: Partial<Adjustment> = {}): Adjustment {
@@ -151,5 +168,55 @@ describe('单语言模式（配比 100/0）', () => {
     })
     expect(p.tasks.some((t) => t.language === 'en')).toBe(false)
     expect(p.notes.join(' ')).toContain('英语已停用')
+  })
+})
+
+describe('skill-share 补短板（第 6 天：写作槽可换）', () => {
+  const base6 = () => ({
+    settings: settings(), dateKey: DAY6, now: NOW6, cardStates: [] as CardState[],
+    allExercises: pool(), events: [] as LearningEvent[], skillStates: [] as SkillState[],
+  })
+  const shareAdj = (): Adjustment => ({
+    id: 'ss1', ts: NOW6 - 2 * 86400000, kind: 'plan-constraint', description: '',
+    expiresAt: NOW6 + 14 * 86400000,
+    payload: { dimension: 'skill-share', target: 'listening', value: 0.5, days: 14, reason: '听力弱' },
+  })
+
+  it('无约束（对照组）：第 6 天没有英语听力训练任务', () => {
+    const p = buildDailyPlan({ ...base6(), adjustments: [] })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'listening' && t.language === 'en')).toBe(false)
+  })
+
+  it('skill-share listening=0.5：写作槽被换成听力，说明与理由都可解释', () => {
+    const p = buildDailyPlan({ ...base6(), adjustments: [shareAdj()] })
+    const li = p.tasks.find((t) => t.kind === 'exercise' && t.skill === 'listening')
+    expect(li).toBeTruthy()
+    expect(li!.language).toBe('en')
+    expect(p.notes.join(' ')).toContain('补强')
+    expect(li!.reasons.join(' ')).toContain('按计划约束补强')
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(false)
+  })
+
+  it('换槽不超预算：总分钟与对照一致（只换技能不换时长）', () => {
+    const control = buildDailyPlan({ ...base6(), adjustments: [] })
+    const boosted = buildDailyPlan({ ...base6(), adjustments: [shareAdj()] })
+    const sum = (p: typeof control) => p.tasks.reduce((a, t) => a + t.estMinutes, 0)
+    expect(sum(boosted)).toBe(sum(control))
+  })
+
+  it('占比达标后不再换槽', () => {
+    const prior: DailyPlan[] = [{
+      date: '2026-10-29', mode: 'standard', generatedAt: NOW6 - 86400000 + 3600000,
+      tasks: [
+        { id: 'l1', kind: 'exercise', language: 'en', skill: 'listening', estMinutes: 5, reasons: [], status: 'done' },
+        { id: 'l2', kind: 'exercise', language: 'en', skill: 'listening', estMinutes: 5, reasons: [], status: 'done' },
+        { id: 'r1', kind: 'exercise', language: 'en', skill: 'reading', estMinutes: 7, reasons: [], status: 'done' },
+        { id: 'w1', kind: 'exercise', language: 'en', skill: 'writing', estMinutes: 12, reasons: [], status: 'done' },
+      ],
+      notes: [],
+    }]
+    const p = buildDailyPlan({ ...base6(), adjustments: [shareAdj()], recentPlans: prior })
+    expect(p.tasks.some((t) => t.kind === 'exercise' && t.skill === 'writing')).toBe(true)
+    expect(p.notes.join(' ')).not.toContain('补强')
   })
 })

@@ -31,6 +31,19 @@ export function WritingRunner({ task, onFinish }: { task: PlannedTask; onFinish:
     void getMeta<{ exerciseId: string; ts: number }>('lastReviewAt').then((r) => setLastReview(r ?? null)).catch(() => undefined)
   }, [ex?.id])
 
+  // 交接包 ctx 用 useMemo 稳定：面板只在 ctx 真变化时重建 prompt（避免每次按键重算）
+  const reviewCtx = useMemo(
+    () =>
+      ex
+        ? {
+            language: ex.language, skill: 'writing' as const, exerciseId: ex.id, taskTitle: ex.title,
+            taskPrompt: ex.prompt, sourceText: text, checklist: ex.checklist.map((c) => c.dimension),
+            alreadyTags: existingDraft?.confirmedTags ?? [],
+          }
+        : null,
+    [ex, text, existingDraft],
+  )
+
   useEffect(() => {
     if (!timerOn) return
     const t = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000)
@@ -178,20 +191,13 @@ export function WritingRunner({ task, onFinish }: { task: PlannedTask; onFinish:
             把这篇作文交给你的 AI 批改：结果按统一错误标签入库（与错题本同一套体系），<b>不给分、不猜等级</b>。
             复制指令 → 粘给你的 agent → 把回复粘回来，本地校验后才写入。
           </p>
-          <AgentPacketPanel
-            def={reviewPacket}
-            ctx={{
-              language: ex.language,
-              skill: 'writing',
-              exerciseId: ex.id,
-              taskTitle: ex.title,
-              taskPrompt: ex.prompt,
-              sourceText: text,
-              checklist: ex.checklist.map((c) => c.dimension),
-              alreadyTags: existingDraft?.confirmedTags ?? [],
-            }}
-            onApplied={() => void actions.reloadAll()}
-          />
+          {reviewCtx && (
+            <AgentPacketPanel
+              def={reviewPacket}
+              ctx={reviewCtx}
+              onApplied={() => void actions.reloadAll()}
+            />
+          )}
 
           <details style={{ marginTop: 12 }}>
             <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>离线通道：粘贴老师/其他工具的批改（不用 AI，本地关键词解析）</summary>
