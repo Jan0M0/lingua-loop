@@ -13,6 +13,19 @@ npm install && npm run dev     # 开发模式 http://localhost:5173
 npm run build && npm run preview   # 生产预览 http://localhost:4173
 ```
 
+## 新机器 / 云端：一行命令完成下载到运行
+
+在有 Node.js（18+）的环境（含交给任何 agent 执行）里，一行命令搞定克隆、装依赖、构建、起服务：
+
+```bash
+git clone https://github.com/Jan0M0/lingua-loop.git && cd lingua-loop && npm install && npm run build && npm start
+```
+
+- `npm start` 会在 `http://localhost:4322` 提供生产构建并自动打开浏览器（无图形界面的环境只起服务，打开该地址即可）；
+- 首次运行 `npm install` 约 1–2 分钟；
+- 注意：换一台机器 = 换一个浏览器 = **一份新的学习数据**（IndexedDB 按地址隔离）。迁移进度用 设置 → 备份与恢复 导出/导入 JSON；
+- 非 localhost 的纯 http 地址下应用完全可用，但 PWA 安装/离线缓存需要 https（浏览器安全策略）。
+
 ⚠️ **不要直接双击 `dist/index.html`**：`file://` 下浏览器禁用 IndexedDB，应用会显示「应用启动失败」。本地优先 ≠ 单文件离线页面，它需要一个 `http://` 地址（本机服务即可，不需要联网）。**正确姿势是上面的「安装为桌面应用」**，装完后连本机服务都不用开。
 
 首次进入是 6 步引导（可随时跳过）：考试类型与日期 → 每日时间 → 英/西比例 → 兴趣 → 动机 → 语音权限。

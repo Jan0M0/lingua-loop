@@ -145,3 +145,10 @@
 - `npm run build`（tsc --noEmit 0 错误）→ 成功；`npx vitest run` → **18 文件 / 103 测试全部通过**。
 - 浏览器实测（IAB，origin http://localhost:4322）：页面正常加载；安装卡片位于设置页首位、IAB 下正确降级为指引文案；`serviceWorker.controller` active、scope 正确；缓存仅含当前构建资源（旧 5 个已清理）；CSS 经 JS 内联 `<style>` 生效（card 12px 圆角、主题蓝按钮、系统字体）；`storage.persisted()` 在 IAB 中为 false（嵌入式浏览器不授予，真实 Chrome 安装 PWA 后通常自动授予——该调用本就是"请求"语义）。
 - 已知限制：IAB 内嵌浏览器不触发 `beforeinstallprompt`（无法在预览面板里演示"安装到桌面"按钮本身），需在系统 Chrome/Edge 中打开 http://localhost:4322 验证；SW 图标（192/512 PNG）由浏览器在安装时自行拉取，未列入 SW 缓存清单（安装动作发生在服务在线时，无影响）。
+
+## 2026-10-25 · 发布到 GitHub + 一行命令云端部署
+
+- `package.json` 新增 `start` 脚本：`vite preview --port 4322 --strictPort --open`（克隆后 `npm start` 即起服务并开浏览器）。
+- QUICKSTART 新增「新机器/云端：一行命令」：`git clone https://github.com/Jan0M0/lingua-loop.git && cd lingua-loop && npm install && npm run build && npm start`，并说明数据按地址隔离、http 非 localhost 下 PWA 受限。
+- 推送前扫描确认：无 .env/密钥/个人数据入库。
+- 仓库：github.com/Jan0M0/lingua-loop（public，便于任何 agent 免凭证 clone；可随时 `gh repo edit Jan0M0/lingua-loop --visibility private` 转私）。
