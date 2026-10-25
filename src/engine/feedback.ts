@@ -84,6 +84,29 @@ export function applyFeedback(
     })
   }
 
+  // v2 §3A.5：兴趣反馈真实改变推荐
+  if (fb.interest && fb.topic) {
+    if (fb.interest === 'fun') {
+      adjustments.push({
+        id: id(),
+        ts: now,
+        kind: 'topic-boost',
+        description: `你觉得「${fb.topic}」有趣：接下来一周会多推荐这个主题的内容`,
+        expiresAt: now + 7 * 86400000,
+        payload: { topic: fb.topic },
+      })
+    } else if (fb.interest === 'not-my-taste') {
+      adjustments.push({
+        id: id(),
+        ts: now,
+        kind: 'topic-deprioritize',
+        description: `「${fb.topic}」不合口味：接下来一周降低这个主题的推荐频率（可在设置里改兴趣偏好）`,
+        expiresAt: now + 7 * 86400000,
+        payload: { topic: fb.topic },
+      })
+    }
+  }
+
   if (fb.stuckNote?.trim()) {
     adjustments.push({
       id: id(),

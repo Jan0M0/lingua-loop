@@ -3,6 +3,14 @@
 
 export type Language = 'en' | 'es'
 
+/** 兴趣主题词表（onboarding / 设置 / 推荐共用；用户可自由增删，不限于此清单） */
+export const INTEREST_TOPICS = [
+  'technology', 'business', 'psychology', 'travel', 'food', 'history',
+  'culture', 'science', 'nature', 'sports', 'movies', 'society',
+  'creative-writing', 'music', 'daily-life', 'work',
+] as const
+export type InterestTopic = (typeof INTEREST_TOPICS)[number]
+
 export type Skill = 'reading' | 'listening' | 'writing' | 'speaking' | 'vocab' | 'grammar'
 
 export type Difficulty = 1 | 2 | 3 | 4 | 5
@@ -16,6 +24,8 @@ export type ExerciseType =
   | 'speaking-task'
   | 'grammar-note'
   | 'diagnostic'
+  | 'story'
+  | 'free-expression'
 
 /** 错误标签统一词表（中英西共用），用于错因归类与再训练 */
 export const ERROR_TAGS = [
@@ -231,6 +241,53 @@ export interface DiagnosticExercise extends ContentMeta {
   questions: (MCQuestion & { skill: Skill })[]
 }
 
+// ---------- 微型故事 / 兴趣探索卡（v2 §3A：先理解意义，再注意语言形式） ----------
+
+export interface StoryHighlight {
+  /** 目标语表达（词、搭配或语块） */
+  expression: string
+  /** 中文释义（自然、贴合故事语境） */
+  glossZh: string
+  /** 该表达在故事中的原句 */
+  fromStory: string
+  /** 例句（故事外的一个自然用例） */
+  extraExample?: string
+}
+
+export interface StoryExercise extends ContentMeta {
+  type: 'story'
+  /** reading 或 listening（listening 表示优先以 TTS 听读联动方式体验） */
+  mode: 'reading' | 'listening'
+  title: string
+  titleZh: string
+  /** 一句话钩子：让人想知道后续（中文） */
+  hookZh: string
+  /** 正文分段（每段 2-5 句，便于"尝一口"与分段收听） */
+  paragraphs: string[]
+  /** 轻理解问题（2-3 道，非考试措辞；可选） */
+  questions?: MCQuestion[]
+  /** 值得带走 1-3 个表达（读完/听完后自然突出） */
+  highlights: StoryHighlight[]
+}
+
+// ---------- 自由表达（v2 §3A.3 表达工作室提示） ----------
+
+export interface FreeExpressionExercise extends ContentMeta {
+  type: 'free-expression'
+  language: Language
+  title: string
+  titleZh: string
+  /** 表达提示（目标语，开放式，不设唯一答案） */
+  prompt: string
+  promptZh: string
+  /** 支持形式 */
+  form: 'write' | 'speak' | 'either'
+  /** 复盘自查提示（3 条以内） */
+  reflectionHints: string[]
+  /** 可参考的开头表达（自然、非模板腔） */
+  starterPhrases: string[]
+}
+
 export type Exercise =
   | VocabCard
   | ReadingExercise
@@ -240,6 +297,8 @@ export type Exercise =
   | SpeakingExercise
   | GrammarNote
   | DiagnosticExercise
+  | StoryExercise
+  | FreeExpressionExercise
 
 /** 内容文件模块的统一导出形状 */
 export interface ContentModule {

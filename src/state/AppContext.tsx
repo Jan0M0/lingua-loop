@@ -51,6 +51,7 @@ export interface AppActions {
   removeRecording(id: string): Promise<void>
   importCustomContent(items: Exercise[]): Promise<{ skipped: number; written: number }>
   setSkillPriors(language: 'en' | 'es', priors: Partial<Record<string, number>>): Promise<void>
+  saveHighlightAsCard(highlight: { expression: string; glossZh: string; fromStory: string; extraExample?: string }, storyId: string): Promise<string | null>
   tomorrowPreview(): string[]
   refreshStorage(): Promise<void>
 }
@@ -159,6 +160,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         skillStates,
         adjustments,
       })
+      // 重排不能丢失当天已完成的任务状态（设置变更触发 force 重建时）：
+      // 1) 新计划中同名/同内容任务继承状态；2) 已完成但被移出新计划的（如做完的诊断）追加保留。
+      if (existing) {
+        const altKey = (t: { kind: string; language: string; skill: string; contentIds?: string[] }) =>
+          `${t.kind}:${t.language}:${t.skill}:${(t.contentIds ?? []).slice().sort().join(',')}`
+        const oldById = new Map(existing.tasks.map((t) => [t.id, t]))
+        const oldByAlt = new Map(existing.tasks.filter((t) => t.status !== 'pending').map((t) => [altKey(t), t]))
+        plan.tasks = plan.tasks.map((t) => {
+          const done = oldById.get(t.id) ?? oldByAlt.get(altKey(t))
+          return done && done.status !== 'pending' ? { ...t, status: done.status } : t
+        })
+        const newIds = new Set(plan.tasks.map((t) => t.id))
+        const newAltKeys = new Set(plan.tasks.map(altKey))
+        const carried = existing.tasks.filter(
+          (t) => t.status !== 'pending' && !newIds.has(t.id) && !newAltKeys.has(altKey(t))
+        )
+        if (carried.length) plan.tasks = [...plan.tasks, ...carried]
+      }
       await db.savePlan(plan)
       setState((s) => ({ ...s, plan }))
       return plan
@@ -301,6 +320,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const custom = await db.getAllCustomContent()
         setState((s) => ({ ...s, customContent: custom, allExercises: [...builtInExercises, ...custom] }))
         return res
+      },
+
+      async saveHighlightAsCard(highlight, storyId) {
+        const id = `voc-${storyId}-${highlight.expression.toLowerCase().replace(/[^a-zà-ÿ0-9]+/g, '-').slice(0, 24)}`
+        const existing = [...builtInExercises, ...state.customContent].find((e) => e.id === id)
+        if (existing) return id
+        const card = {
+          id,
+          language: (storyId.startsWith('en-') ? 'en' : 'es') as 'en' | 'es',
+          skill: 'vocab' as const,
+          type: 'vocab-card' as const,
+          topic: 'general',
+          difficulty: 2 as const,
+          estimatedMinutes: 1,
+          tags: ['from-story'],
+          createdAt: localDateKey(),
+          contentVersion: 1,
+          source: 'user-imported' as const,
+          license: `来自故事 ${storyId} 的表达收藏`,
+          term: highlight.expression,
+          pos: 'expression',
+          glossZh: highlight.glossZh,
+          definition: highlight.fromStory,
+          collocations: [highlight.fromStory, highlight.extraExample ?? highlight.fromStory],
+          examples: [
+            { sentence: highlight.fromStory, zh: highlight.glossZh },
+            { sentence: highlight.extraExample ?? highlight.fromStory, zh: highlight.glossZh },
+          ],
+          commonError: undefined,
+        }
+        await db.putCustomContent([card], 'skip')
+        const custom = await db.getAllCustomContent()
+        setState((s) => ({ ...s, customContent: custom, allExercises: [...builtInExercises, ...custom] }))
+        // 立即进入 SRS（明天到期复习）
+        await actions.reviewCard(id, 2, 30, { detail: { mode: 'introduce' } })
+        return id
       },
 
       async setSkillPriors(language, priors) {

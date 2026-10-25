@@ -1,8 +1,15 @@
-// 设置与备份：目标、预算、比例、语音、导出/恢复、清空
+// 设置与备份：目标、预算、比例、兴趣、语音、导出/恢复、清空
 import { useRef, useState } from 'react'
 import { useActions, useAppState } from '../state/AppContext'
 import { applyRestore, downloadBackupFile, exportBackup, previewRestore, wipeEverything } from '../storage/backup'
 import { Badge, Segmented } from '../components/ui'
+import { INTEREST_TOPICS } from '../types/content'
+import { topicLabel } from '../engine/recommend'
+
+const MOTIVATION_LABELS: Record<string, string> = {
+  travel: '旅行', 'study-work': '学习/工作', friends: '交朋友', culture: '文化',
+  express: '表达自己', exam: '考试', moving: '移居',
+}
 
 export function Settings() {
   const state = useAppState()
@@ -76,6 +83,23 @@ export function Settings() {
           <span>应用名称</span>
           <input type="text" value={s.appName} onChange={(e) => void actions.updateSettings({ appName: e.target.value })} />
         </label>
+      </div>
+
+      <div className="card">
+        <h2>兴趣与动机</h2>
+        <p className="small dim">首页"给我一个有意思的东西"按这些主题推荐；点选可随时增减，不影响其他功能。</p>
+        <div className="row">
+          {INTEREST_TOPICS.map((t) => (
+            <button key={t} className={`chip ${s.interests.includes(t) ? 'on' : ''}`} onClick={() =>
+              void actions.updateSettings({
+                interests: s.interests.includes(t) ? s.interests.filter((x) => x !== t) : [...s.interests, t],
+              })
+            }>{topicLabel(t)}</button>
+          ))}
+        </div>
+        {s.motivations.length > 0 && (
+          <p className="small dim" style={{ marginTop: 8 }}>你当初的动机：{s.motivations.map((m) => MOTIVATION_LABELS[m] ?? m).join('、')}（记录于引导，供你自己回顾）</p>
+        )}
       </div>
 
       <div className="card">

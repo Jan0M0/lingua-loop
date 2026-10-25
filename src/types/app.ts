@@ -20,6 +20,10 @@ export interface Settings {
   diagnosticsDone: Partial<Record<Language, boolean>>
   /** 随机种子盐，保证计划可复现且每人不同 */
   seedSalt: string
+  /** 兴趣主题（v2 §3A.1.3：可选、可编辑、可跳过；空数组表示未选择，推荐按多样性轮换） */
+  interests: string[]
+  /** 学语言的动机（v2 §3A.5：多选、可跳过） */
+  motivations: string[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,11 +40,15 @@ export const DEFAULT_SETTINGS: Settings = {
   dayModeOverride: 'auto',
   diagnosticsDone: {},
   seedSalt: 'default',
+  interests: [],
+  motivations: [],
 }
 
 export type SelfDifficulty = 'too-easy' | 'right' | 'too-hard'
 export type SelfValue = 'useful' | 'neutral' | 'not-useful'
 export type Energy = 'good' | 'ok' | 'tired'
+/** v2 §3A.5 轻反馈：有趣 / 一般 / 不合口味（可选，用于调整主题推荐） */
+export type InterestFeedback = 'fun' | 'ok' | 'not-my-taste'
 
 /** 一条学习事件：每次训练（或一张卡、一道题）至少落一条 */
 export interface LearningEvent {
@@ -126,6 +134,8 @@ export interface PlannedTask {
   progress?: number
   /** 低认知负荷任务（疲惫时优先） */
   lowLoad?: boolean
+  /** 关联主题（v2：用于兴趣反馈调整推荐） */
+  topic?: string
 }
 
 export type DayMode = 'minimum' | 'standard' | 'sprint'
@@ -149,6 +159,10 @@ export interface TaskFeedback {
   difficulty: SelfDifficulty
   value: SelfValue
   energy: Energy
+  /** v2 轻反馈：内容是否合口味（可选） */
+  interest?: InterestFeedback
+  /** 关联主题（用于主题偏好调整） */
+  topic?: string
   stuckNote?: string
 }
 
@@ -156,7 +170,7 @@ export interface TaskFeedback {
 export interface Adjustment {
   id: string
   ts: number
-  kind: 'card-ease' | 'skill-difficulty' | 'type-deprioritize' | 'plan-note'
+  kind: 'card-ease' | 'skill-difficulty' | 'type-deprioritize' | 'plan-note' | 'topic-boost' | 'topic-deprioritize'
   description: string
   /** 调整何时失效 */
   expiresAt?: number

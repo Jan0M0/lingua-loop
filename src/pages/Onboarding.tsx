@@ -4,7 +4,19 @@ import { useActions } from '../state/AppContext'
 import { localDateKey, addDays } from '../engine/dates'
 import { navigate } from '../router'
 import { Segmented } from '../components/ui'
+import { INTEREST_TOPICS } from '../types/content'
+import { topicLabel } from '../engine/recommend'
 import type { Skill } from '../types/content'
+
+const MOTIVATIONS = [
+  { value: 'travel', label: '旅行' },
+  { value: 'study-work', label: '学习 / 工作' },
+  { value: 'friends', label: '交朋友' },
+  { value: 'culture', label: '文化' },
+  { value: 'express', label: '表达自己' },
+  { value: 'exam', label: '考试' },
+  { value: 'moving', label: '移居' },
+]
 
 const SKILLS: { skill: Skill; label: string }[] = [
   { skill: 'reading', label: '阅读' }, { skill: 'listening', label: '听力' },
@@ -23,6 +35,8 @@ export function Onboarding() {
   const [esRatings, setEsRatings] = useState<Record<string, string>>({})
   const [ttsEnabled, setTtsEnabled] = useState(true)
   const [recognition, setRecognition] = useState(false)
+  const [interests, setInterests] = useState<string[]>([])
+  const [motivations, setMotivations] = useState<string[]>([])
 
   const finish = async (skipRest = false) => {
     await actions.updateSettings({
@@ -34,6 +48,8 @@ export function Onboarding() {
       priorityEn: skipRest ? 70 : priorityEn,
       ttsEnabled,
       speechRecognitionEnabled: recognition,
+      interests: skipRest ? [] : interests,
+      motivations: skipRest ? [] : motivations,
       skillSelfRatings: skipRest ? {} : { en: enRatings, es: esRatings },
       seedSalt: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     })
@@ -111,7 +127,30 @@ export function Onboarding() {
       ),
     },
     {
-      title: '⑤ 语音权限（都可关闭）',
+      title: '⑤ 你对什么感兴趣？（选填）',
+      body: (
+        <>
+          <p className="small dim">这决定首页"给我一个有意思的东西"给你推什么。全部可跳过、以后随时在设置里改。</p>
+          <div className="row">
+            {INTEREST_TOPICS.map((t) => (
+              <button key={t} className={`chip ${interests.includes(t) ? 'on' : ''}`} onClick={() =>
+                setInterests(interests.includes(t) ? interests.filter((x) => x !== t) : [...interests, t])
+              }>{topicLabel(t)}</button>
+            ))}
+          </div>
+          <div className="section-title">你为什么想学语言？（选填）</div>
+          <div className="row">
+            {MOTIVATIONS.map((m) => (
+              <button key={m.value} className={`chip ${motivations.includes(m.value) ? 'on' : ''}`} onClick={() =>
+                setMotivations(motivations.includes(m.value) ? motivations.filter((x) => x !== m.value) : [...motivations, m.value])
+              }>{m.label}</button>
+            ))}
+          </div>
+        </>
+      ),
+    },
+    {
+      title: '⑥ 语音权限（都可关闭）',
       body: (
         <>
           <label className="spread" style={{ padding: '8px 0' }}>

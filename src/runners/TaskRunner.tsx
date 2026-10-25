@@ -7,6 +7,8 @@ import { MCRunner } from './MCRunner'
 import { ListeningRunner } from './ListeningRunner'
 import { WritingRunner } from './WritingRunner'
 import { SpeakingRunner } from './SpeakingRunner'
+import { StoryRunner } from './StoryRunner'
+import { FreeExpressionRunner } from './FreeExpressionRunner'
 import { FeedbackForm } from '../components/FeedbackForm'
 import { navigate } from '../router'
 
@@ -30,6 +32,10 @@ export function TaskRunner({ task, fromReview }: { task: PlannedTask; fromReview
             <CheckpointRunner task={task} onDone={finishRun} />
           ) : task.kind === 'srs-review' || task.kind === 'new-vocab' ? (
             <VocabRunner task={task} onFinish={finishRun} />
+          ) : task.exerciseType === 'story' ? (
+            <StoryRunner task={task} onFinish={finishRun} />
+          ) : task.exerciseType === 'free-expression' ? (
+            <FreeExpressionRunner task={task} onFinish={finishRun} />
           ) : task.exerciseType === 'listening' ? (
             <ListeningRunner task={task} onFinish={finishRun} />
           ) : task.exerciseType === 'writing-task' ? (
@@ -52,6 +58,7 @@ export function TaskRunner({ task, fromReview }: { task: PlannedTask; fromReview
           skill={task.skill}
           exerciseType={task.exerciseType ?? 'vocab-card'}
           contentIds={task.contentIds ?? []}
+          topic={task.topic}
           onSubmit={submitFeedback}
           onCancel={async () => {
             await actions.markTask(task.id, 'done')

@@ -5,11 +5,13 @@ import type { ContentIssue } from '../types/app'
 import type {
   ClozeExercise,
   Exercise,
+  FreeExpressionExercise,
   GrammarNote,
   ListeningExercise,
   MCQuestion,
   ReadingExercise,
   SpeakingExercise,
+  StoryExercise,
   VocabCard,
   WritingExercise,
   DiagnosticExercise,
@@ -32,6 +34,10 @@ const ID_PREFIX_RULES: { prefix: string; type: Exercise['type'] }[] = [
   { prefix: 'es-gr-', type: 'grammar-note' },
   { prefix: 'en-diag-', type: 'diagnostic' },
   { prefix: 'es-diag-', type: 'diagnostic' },
+  { prefix: 'en-story-', type: 'story' },
+  { prefix: 'es-story-', type: 'story' },
+  { prefix: 'en-fe-', type: 'free-expression' },
+  { prefix: 'es-fe-', type: 'free-expression' },
 ]
 
 const LANG_BY_PREFIX: Record<string, 'en' | 'es'> = {
@@ -261,6 +267,52 @@ export function validateExercise(ex: Exercise): ContentIssue[] {
         }
       })
       validateQuestions(ex.id, d.questions, issues)
+      break
+    }
+    case 'story': {
+      const s = ex as StoryExercise
+      if (!nonEmpty(s.title) || !nonEmpty(s.hookZh)) {
+        issues.push({ level: 'error', id: ex.id, field: 'title/hookZh', message: '故事缺标题或钩子' })
+      }
+      if (!Array.isArray(s.paragraphs) || s.paragraphs.length < 2) {
+        issues.push({ level: 'error', id: ex.id, field: 'paragraphs', message: '故事至少 2 段（支持"尝一口"）' })
+      } else {
+        s.paragraphs.forEach((p, i) => {
+          if (!nonEmpty(p)) issues.push({ level: 'error', id: ex.id, field: `paragraphs[${i}]`, message: '空段落' })
+        })
+      }
+      if (!Array.isArray(s.highlights) || s.highlights.length < 1 || s.highlights.length > 3) {
+        issues.push({ level: 'error', id: ex.id, field: 'highlights', message: '故事需要 1–3 个值得带走的表达' })
+      } else {
+        s.highlights.forEach((h, i) => {
+          if (!nonEmpty(h.expression) || !nonEmpty(h.glossZh) || !nonEmpty(h.fromStory)) {
+            issues.push({ level: 'error', id: ex.id, field: `highlights[${i}]`, message: '表达缺少 expression/glossZh/fromStory' })
+          }
+        })
+      }
+      if (s.questions && s.questions.length > 0) {
+        if (s.questions.length < 2) {
+          issues.push({ level: 'error', id: ex.id, field: 'questions', message: '故事理解题应为 2–3 道或省略' })
+        }
+        validateQuestions(ex.id, s.questions, issues)
+      }
+      if (s.mode !== 'reading' && s.mode !== 'listening') {
+        issues.push({ level: 'error', id: ex.id, field: 'mode', message: 'mode 应为 reading | listening' })
+      }
+      break
+    }
+    case 'free-expression': {
+      const f = ex as FreeExpressionExercise
+      if (!nonEmpty(f.prompt)) issues.push({ level: 'error', id: ex.id, field: 'prompt', message: '自由表达缺提示' })
+      if (!Array.isArray(f.reflectionHints) || f.reflectionHints.length < 1 || f.reflectionHints.length > 3) {
+        issues.push({ level: 'error', id: ex.id, field: 'reflectionHints', message: '复盘提示 1–3 条' })
+      }
+      if (!Array.isArray(f.starterPhrases) || f.starterPhrases.length < 2) {
+        issues.push({ level: 'error', id: ex.id, field: 'starterPhrases', message: '至少 2 条开头表达' })
+      }
+      if (!['write', 'speak', 'either'].includes(f.form)) {
+        issues.push({ level: 'error', id: ex.id, field: 'form', message: 'form 应为 write | speak | either' })
+      }
       break
     }
   }

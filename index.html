@@ -12,6 +12,86 @@
   <body>
     <div id="root"></div>
     <noscript>Lingua Loop 需要 JavaScript 才能运行。全部数据保存在你自己的浏览器里。</noscript>
+    <script>
+      // 启动错误面板：主脚本解析/运行失败时不留白屏，直接显示错误（本地优先应用的诚实做法）
+      ;(function () {
+        var shown = 0
+        function show(msg) {
+          if (shown > 2 || document.getElementById('root')?.children.length) return
+          shown++
+          var mount = function () {
+            var root = document.getElementById('root') || document.body
+            if (root && !root.children.length) {
+              root.innerHTML =
+                '<div style="font-family:system-ui,sans-serif;max-width:640px;margin:48px auto;padding:20px;border:1px solid #e3e6eb;border-radius:12px;color:#b3261e;background:#fff">' +
+                '<h2 style="margin:0 0 8px;font-size:16px;color:#1f2430">应用启动失败</h2>' +
+                '<p style="font-size:13px;margin:4px 0;word-break:break-all">' +
+                String(msg).slice(0, 300).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] }) +
+                '</p><p style="font-size:12px;color:#5b6472">请刷新重试；若持续出现，请带此信息反馈。本地学习数据不会因此丢失。</p></div>'
+            }
+          }
+          if (document.body) mount()
+          else document.addEventListener('DOMContentLoaded', mount)
+        }
+        window.addEventListener('error', function (e) { show(e.message || '未知脚本错误') }, true)
+        window.addEventListener('unhandledrejection', function (e) { show('Promise: ' + ((e.reason && e.reason.message) || e.reason)) })
+        // 诊断环：保留最早的 30 条 error/warn，供启动失败排查（window.__llBootLog）
+        try {
+          var ring = []
+          window.__llBootLog = ring
+          var wrap = function (orig, level) {
+            return function () {
+              if (ring.length < 30) {
+                ring.push(level + ': ' + Array.prototype.map.call(arguments, function (a) {
+                  return a && a.message ? a.message : String(a)
+                }).join(' ').slice(0, 200))
+              }
+              return orig.apply(console, arguments)
+            }
+          }
+          console.error = wrap(console.error, 'error')
+          console.warn = wrap(console.warn, 'warn')
+        } catch (e) { /* ignore */ }
+      })()
+    </script>
+    <script>
+      // 离线兜底（docs/OFFLINE_AND_PRIVACY.md）：个别环境下，离线时由缓存返回的文档，
+      // 其解析期的子资源请求可能不经过 Service Worker 而直连网络导致失败（白屏）。
+      // 检测主脚本/样式加载失败后，等 SW 就绪再以动态注入重试——动态请求一定经过已激活的 SW。
+      ;(function () {
+        if (!('serviceWorker' in navigator)) return
+        window.addEventListener(
+          'error',
+          function (e) {
+            var t = e.target
+            if (!t || !t.tagName || (t.getAttribute && t.getAttribute('data-sw-retry'))) return
+            if (t.tagName === 'SCRIPT') {
+              var src = t.getAttribute('src') || ''
+              if (/^\/assets\/.+\.js$/.test(src)) {
+                navigator.serviceWorker.ready.then(function () {
+                  var s = document.createElement('script')
+                  s.src = src
+                  s.setAttribute('data-sw-retry', '1')
+                  document.head.appendChild(s)
+                })
+              }
+            } else if (t.tagName === 'LINK') {
+              var href = t.getAttribute('href') || ''
+              if (t.rel === 'stylesheet' && /^\/assets\/.+\.css$/.test(href)) {
+                navigator.serviceWorker.ready.then(function () {
+                  var l = document.createElement('link')
+                  l.rel = 'stylesheet'
+                  l.href = href
+                  l.setAttribute('data-sw-retry', '1')
+                  document.head.appendChild(l)
+                })
+              }
+            }
+          },
+          true
+        )
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

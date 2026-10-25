@@ -1,21 +1,23 @@
-// 任务结束微反馈：1–2 次点击 + 选填卡点。反馈会真实改变后续训练。
+// 任务结束微反馈：1–2 次点击 + 选填卡点。反馈会真实改变后续训练（v2：含兴趣维度）。
 import { useState } from 'react'
-import type { Energy, SelfDifficulty, SelfValue, TaskFeedback } from '../types/app'
+import type { Energy, InterestFeedback, SelfDifficulty, SelfValue, TaskFeedback } from '../types/app'
 import { Segmented } from './ui'
 
 export function FeedbackForm({
-  language, skill, exerciseType, contentIds, onSubmit, onCancel,
+  language, skill, exerciseType, contentIds, topic, onSubmit, onCancel,
 }: {
   language: TaskFeedback['language']
   skill: TaskFeedback['skill']
   exerciseType: TaskFeedback['exerciseType']
   contentIds: string[]
+  topic?: string
   onSubmit: (fb: TaskFeedback) => void
   onCancel: () => void
 }) {
   const [difficulty, setDifficulty] = useState<SelfDifficulty | null>(null)
   const [value, setValue] = useState<SelfValue | null>(null)
   const [energy, setEnergy] = useState<Energy | null>(null)
+  const [interest, setInterest] = useState<InterestFeedback | null>(null)
   const [stuck, setStuck] = useState('')
   const [showStuck, setShowStuck] = useState(false)
 
@@ -23,8 +25,17 @@ export function FeedbackForm({
 
   return (
     <div className="card fadein" aria-label="任务反馈">
-      <h2>这次训练感觉如何？</h2>
-      <p className="small dim">你的反馈会直接调整下次任务的难度、类型和复习间隔——不只是记录。</p>
+      <h2>这次体验感觉如何？</h2>
+      <p className="small dim">你的反馈会直接调整下次的难度、类型、复习间隔和推荐主题——不只是记录。</p>
+
+      {topic && (
+        <>
+          <div className="section-title">这个主题有趣吗？（可选）</div>
+          <Segmented value={interest ?? ''} onChange={(v) => setInterest(v as InterestFeedback)} options={[
+            { value: 'fun', label: '有趣' }, { value: 'ok', label: '一般' }, { value: 'not-my-taste', label: '不合口味' },
+          ]} />
+        </>
+      )}
 
       <div className="section-title">难度</div>
       <Segmented value={difficulty ?? ''} onChange={(v) => setDifficulty(v as SelfDifficulty)} options={[
@@ -55,7 +66,13 @@ export function FeedbackForm({
       <div className="row" style={{ marginTop: 14 }}>
         <button className="btn primary" disabled={!canSubmit} onClick={() => {
           if (!difficulty || !value || !energy) return
-          onSubmit({ ts: Date.now(), language, skill, exerciseType, contentIds, difficulty, value, energy, stuckNote: stuck.trim() || undefined })
+          onSubmit({
+            ts: Date.now(), language, skill, exerciseType, contentIds,
+            difficulty, value, energy,
+            interest: interest ?? undefined,
+            topic,
+            stuckNote: stuck.trim() || undefined,
+          })
         }}>提交反馈</button>
         <button className="btn subtle" onClick={onCancel}>跳过</button>
       </div>

@@ -6,7 +6,7 @@
   "description": "Lingua Loop — 本地优先、离线可用、0 Token 的 IELTS 8 + 西语 B2 自适应训练应用",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/fix-script-tag.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
