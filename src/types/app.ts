@@ -72,7 +72,7 @@ export interface LearningEvent {
   note?: string
   contentVersion: number
   detail?: {
-    questionResults?: { qid: string; correct: boolean; chosen: number; seconds: number }[]
+    questionResults?: { qid: string; correct: boolean; chosen: number; seconds: number; questionType?: string }[]
     wordCount?: number
     minutes?: number
     selfEvalScores?: { dimension: string; score: number }[]
@@ -188,6 +188,10 @@ export interface WritingDraft {
   history: { ts: number; text: string; label: string }[]
   selfEvalScores?: { dimension: string; score: number }[]
   externalFeedback?: string
+  /** 用户在「外部反馈解析」里确认过的错误标签（外部反馈原文不会被自动当作数据） */
+  confirmedTags?: ErrorTag[]
+  /** 用户勾选采纳的行动项（来自外部反馈解析） */
+  actionItems?: string[]
 }
 
 export interface RecordingMeta {

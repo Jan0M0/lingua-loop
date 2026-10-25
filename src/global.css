@@ -165,6 +165,24 @@ table.data th { color: var(--text-dim); font-weight: 500; font-size: 13px; }
   .topnav { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
   .topnav a { white-space: nowrap; padding: 6px 9px; }
   .card { padding: 13px; }
+
+  /* 记录表在窄屏改为卡片式堆叠：6 列横向挤压会逐字换行，无法阅读 */
+  table.data.records-table thead { display: none; }
+  table.data.records-table,
+  table.data.records-table tbody,
+  table.data.records-table tr,
+  table.data.records-table td { display: block; width: 100%; }
+  table.data.records-table tr {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 8px;
+  }
+  table.data.records-table td { border: none; padding: 2px 0; }
+  table.data.records-table td[data-label]::before {
+    content: attr(data-label) '：';
+    color: var(--text-dim); font-size: 12px;
+  }
+  table.data.records-table td.edit-cell { padding: 4px 0 0; }
+  table.data.records-table td.edit-cell::before { content: none; }
 }
 
 /* 提示条 */

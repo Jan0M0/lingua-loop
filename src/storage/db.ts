@@ -95,6 +95,12 @@ export async function getAllEvents(): Promise<LearningEvent[]> {
   return db.getAll('events')
 }
 
+/** 覆盖写一条事件（用于用户编辑备注/错误标签；不改 id 与时间戳） */
+export async function putEvent(ev: LearningEvent): Promise<void> {
+  const db = await openLinguaDB()
+  await db.put('events', ev)
+}
+
 export async function deleteEvent(id: string): Promise<void> {
   const db = await openLinguaDB()
   await db.delete('events', id)

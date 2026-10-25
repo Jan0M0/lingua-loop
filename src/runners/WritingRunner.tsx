@@ -5,6 +5,7 @@ import type { WritingExercise } from '../types/content'
 import { useActions, useAppState } from '../state/AppContext'
 import { analyzeWriting, type WritingAnalysis } from '../engine/writing-analyzer'
 import { Badge } from '../components/ui'
+import { FeedbackParser } from '../components/FeedbackParser'
 
 const EVAL_OPTIONS = ['没做到', '部分做到', '做到了'] as const
 
@@ -159,12 +160,28 @@ export function WritingRunner({ task, onFinish }: { task: PlannedTask; onFinish:
             </div>
           ))}
           <h3 style={{ marginTop: 12 }}>粘贴外部反馈（可选）</h3>
-          <p className="small dim">如果你把作文发给老师/其他工具并获得反馈，可以粘贴在这里留档。应用不会自动把外部文字当作数据——错误标签需要你在「学习记录」里自行确认。</p>
+          <p className="small dim">把老师/其他工具的批改粘贴在这里存档；下方能把它拆成「候选错误标签 + 行动项」，勾选确认后才会写进最近一次写作记录（应用不会自动采信外部文字）。</p>
           <textarea value={external} onChange={(e) => setExternal(e.target.value)} rows={4} placeholder="粘贴老师的批改/建议…" />
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn" onClick={() => persist('保存外部反馈')}>保存反馈</button>
+            <button className="btn" onClick={() => persist('保存外部反馈')}>保存反馈原文</button>
             <button className="btn primary lg" onClick={onFinish}>完成任务</button>
           </div>
+          {external.trim() && (
+            <details style={{ marginTop: 8 }}>
+              <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>解析为错误标签 / 行动项</summary>
+              <div style={{ marginTop: 8 }}>
+                <FeedbackParser
+                  text={external}
+                  language={ex.language}
+                  alreadyTags={existingDraft?.confirmedTags ?? []}
+                  onConfirm={async (tags, acts) => {
+                    const res = await actions.applyDraftFeedbackTags(ex.id, tags, acts)
+                    return res.note
+                  }}
+                />
+              </div>
+            </details>
+          )}
           {existingDraft && existingDraft.history.length > 0 && (
             <details style={{ marginTop: 10 }}>
               <summary className="small" style={{ cursor: 'pointer', color: 'var(--accent)' }}>修订历史（初稿 vs 修改稿）</summary>

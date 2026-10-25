@@ -14,11 +14,14 @@ import type {
 } from '../types/app'
 import { DEFAULT_SETTINGS } from '../types/app'
 import type { Exercise } from '../types/content'
+import type { ErrorTag } from '../types/content'
 import { builtInExercises } from '../content/registry'
 import { buildDailyPlan, previewTomorrow } from '../engine/scheduler'
 import { applyEaseDelta, applyFeedback, applySkillOffset } from '../engine/feedback'
 import { gradeCard, newCardState, performanceToGrade } from '../engine/srs'
 import { updateSkillState } from '../engine/mastery'
+import { mergeTags } from '../engine/feedback-parser'
+import { applyConfirmedFeedback } from '../storage/feedback-tags'
 import { localDateKey } from '../engine/dates'
 import * as db from '../storage/db'
 
@@ -42,6 +45,11 @@ export interface AppActions {
   updateSettings(patch: Partial<Settings>): Promise<void>
   ensureTodayPlan(force?: boolean): Promise<DailyPlan | null>
   recordEvent(ev: LearningEvent): Promise<void>
+  /** 用户手动编辑记录：备注与错误标签（§8.6 / §5.D 外部反馈确认后落库） */
+  updateEvent(id: string, patch: { note?: string; errorTags?: string[] }): Promise<void>
+  removeEvent(id: string): Promise<void>
+  /** 把用户在外部反馈解析面板里确认的标签/行动项写进该写作任务最近一次事件，并记在草稿上 */
+  applyDraftFeedbackTags(exerciseId: string, tags: ErrorTag[], actions?: string[]): Promise<{ eventId: string | null; note: string }>
   reviewCard(cardId: string, grade: 0 | 1 | 2 | 3, seconds: number, extra?: Partial<LearningEvent>): Promise<void>
   markTask(taskId: string, status: PlannedTask['status']): Promise<void>
   submitFeedback(fb: TaskFeedback): Promise<void>
@@ -243,6 +251,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
             : [...s.cardStates, next],
         }))
         await actions.recordEvent(ev)
+      },
+
+      async updateEvent(id, patch) {
+        const all = await db.getAllEvents()
+        const ev = all.find((x) => x.id === id)
+        if (!ev) return
+        const next: LearningEvent = {
+          ...ev,
+          note: patch.note !== undefined ? patch.note.trim() || undefined : ev.note,
+          errorTags: patch.errorTags !== undefined ? mergeTags([], patch.errorTags) : ev.errorTags,
+        }
+        await db.putEvent(next)
+        setState((s) => ({ ...s, events: s.events.map((x) => (x.id === id ? next : x)) }))
+      },
+
+      async removeEvent(id) {
+        await db.deleteEvent(id)
+        setState((s) => ({ ...s, events: s.events.filter((x) => x.id !== id) }))
+      },
+
+      async applyDraftFeedbackTags(exerciseId, tags, actions = []) {
+        const outcome = await applyConfirmedFeedback(exerciseId, tags, actions)
+        if (outcome.event || outcome.draft) {
+          setState((s) => ({
+            ...s,
+            events: outcome.event ? s.events.map((x) => (x.id === outcome.event!.id ? outcome.event! : x)) : s.events,
+            drafts: outcome.draft
+              ? s.drafts.some((d) => d.id === outcome.draft!.id)
+                ? s.drafts.map((d) => (d.id === outcome.draft!.id ? outcome.draft! : d))
+                : [...s.drafts, outcome.draft!]
+              : s.drafts,
+          }))
+        }
+        return { eventId: outcome.event?.id ?? null, note: outcome.note }
       },
 
       async markTask(taskId, status) {

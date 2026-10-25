@@ -30,11 +30,11 @@
 | `skillStates` | `${lang}:${skill}` | SkillState：事件数、EWMA 表现、难度瞄准偏移、诊断先验 |
 | `plans` | 日期 YYYY-MM-DD | DailyPlan：模式、任务列表（含理由）、说明 |
 | `adjustments` | id | 反馈触发的可解释调整（含过期时间） |
-| `drafts` | id | WritingDraft：作文文本 + 修订历史 + 自评 + 外部反馈存档 |
+| `drafts` | id | WritingDraft：作文文本 + 修订历史 + 自评 + 外部反馈存档 + 已确认标签 `confirmedTags` / 行动项 `actionItems` |
 | `recordings` | id | 录音 Blob + 元数据（大小/秒数/关联任务） |
 | `customContent` | 内容 id | 用户导入的内容（与内置同 schema） |
 
-`LearningEvent` 关键字段：`ts/language/skill/exerciseType/contentId`、`correct`（客观题）、`score`（0–1，开放任务）、`secondsSpent/hintsUsed`、`selfDifficulty/selfValue/energy`（微反馈）、`errorTags`、`detail.questionResults`（逐题对错）、`detail.cardGrade`、`detail.selfEvalScores`、`note`。
+`LearningEvent` 关键字段：`ts/language/skill/exerciseType/contentId`、`correct`（客观题）、`score`（0–1，开放任务）、`secondsSpent/hintsUsed`、`selfDifficulty/selfValue/energy`（微反馈）、`errorTags`、`detail.questionResults`（逐题对错；含可选 `questionType` 与估算 `seconds`，供分题型正确率/速度统计）、`detail.cardGrade`、`detail.selfEvalScores`、`note`。
 
 ## 备份 JSON 格式
 
@@ -53,6 +53,12 @@
 
 - 恢复流程：解析 → 校验标识与结构 → 预览（各 store 计数 + ID 冲突列表）→ 用户选择冲突策略（跳过/覆盖）→ 写入。
 - 录音默认不含在导出中（可选包含，会显著增大文件）。
+
+## 外部反馈解析（0 Token，纯本地规则）
+
+- 规则表 `src/engine/feedback-parser.ts`：关键词（中/英/西）→ `ERROR_TAGS` 词表内的标签；输出候选（命中次数 + 原句证据）与行动项。
+- 写入只发生在用户确认后：`src/storage/feedback-tags.ts` 把标签并入该作文**最近一次**事件、行动项追加进 `note`，并在草稿上留 `confirmedTags` / `actionItems`。
+- 标签展示走 `src/engine/tag-labels.ts`（中文名），存储仍是稳定英文 ID，保证备份/统计口径不变。
 
 ## 内容导入格式
 

@@ -104,6 +104,14 @@ describe('复盘与周报', () => {
     expect(w.dueCompletion).toBeCloseTo(0.9)
     expect(w.actualMinutes).toBe(100)
   })
+
+  it('覆盖缺口用中文标签，不把内部键 en:listening 丢给用户', () => {
+    const w = weeklyReport('2026-10-19', [], [], { dueInWeek: 0, reviewedInWeek: 0 })
+    const gapLine = w.concerns.find((c) => c.includes('未覆盖'))
+    expect(gapLine).toBeDefined()
+    expect(gapLine).toContain('英语·听力')
+    expect(gapLine).not.toContain('en:')
+  })
 })
 
 describe('诊断评分', () => {

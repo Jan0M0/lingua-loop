@@ -1,5 +1,5 @@
 // 听力运行器：TTS 朗读脚本 + 作答 + 复盘（无语音时提供文本模式并明确标注）
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { LearningEvent, PlannedTask } from '../types/app'
 import type { ListeningExercise } from '../types/content'
 import { useActions, useAppState } from '../state/AppContext'
@@ -17,6 +17,13 @@ export function ListeningRunner({ task, onFinish }: { task: PlannedTask; onFinis
   const [playing, setPlaying] = useState(false)
   const [showScriptAnyway, setShowScriptAnyway] = useState(false)
   const [startedAt] = useState(Date.now())
+  /** 每题首次作答时间点：用于估算分题型速度 */
+  const answerTimes = useRef<Record<string, number>>({})
+  const recordChoice = (qid: string, optionIndex: number) => {
+    if (submitted) return
+    if (answerTimes.current[qid] == null) answerTimes.current[qid] = Date.now()
+    setChoices((prev) => ({ ...prev, [qid]: optionIndex }))
+  }
 
   if (!ex) {
     return <div className="card">找不到该听力内容。<button className="btn" onClick={onFinish}>结束任务</button></div>
@@ -42,12 +49,25 @@ export function ListeningRunner({ task, onFinish }: { task: PlannedTask; onFinis
     setSubmitted(true)
     stopSpeaking()
     const wrongTags = ex.questions.filter((q) => choices[q.id] !== q.answerIndex).flatMap((q) => q.errorTags)
+    let prevAt = startedAt
+    const questionResults = ex.questions.map((q) => {
+      const at = answerTimes.current[q.id] ?? prevAt
+      const dwell = Math.max(0, Math.round((at - prevAt) / 1000))
+      prevAt = at
+      return {
+        qid: q.id,
+        correct: choices[q.id] === q.answerIndex,
+        chosen: choices[q.id] ?? -1,
+        seconds: dwell,
+        questionType: q.questionType,
+      }
+    })
     const ev: LearningEvent = {
       id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       ts: Date.now(), language: ex.language, skill: 'listening', exerciseType: 'listening',
       contentId: ex.id, score, correct: score >= 0.5, secondsSpent: Math.round((Date.now() - startedAt) / 1000),
       hintsUsed: 0, errorTags: [...new Set(wrongTags)], contentVersion: ex.contentVersion,
-      detail: { questionResults: ex.questions.map((q) => ({ qid: q.id, correct: choices[q.id] === q.answerIndex, chosen: choices[q.id] ?? -1, seconds: 0 })) },
+      detail: { questionResults },
     }
     await actions.recordEvent(ev)
   }
@@ -116,8 +136,8 @@ export function ListeningRunner({ task, onFinish }: { task: PlannedTask; onFinis
                 } else if (i === chosen) cls += ' selected'
                 return (
                   <div key={i} className={cls} role="button" tabIndex={0}
-                    onClick={() => { if (!submitted) setChoices({ ...choices, [q.id]: i }) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !submitted) setChoices({ ...choices, [q.id]: i }) }}>
+                    onClick={() => recordChoice(q.id, i)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') recordChoice(q.id, i) }}>
                     <span className="letter">{'ABCD'[i]}</span><span>{opt}</span>
                   </div>
                 )

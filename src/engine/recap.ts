@@ -3,6 +3,15 @@ import type { DailyPlan, LearningEvent } from '../types/app'
 import { localDateKey, weekStartKey, dateKeyToDate } from './dates'
 import { formatMinutes } from './dates'
 
+const LANG_ZH: Record<string, string> = { en: '英语', es: '西语' }
+const SKILL_ZH: Record<string, string> = { reading: '阅读', listening: '听力', writing: '写作', speaking: '口语', vocab: '词汇', grammar: '语法' }
+
+/** 把内部键 en:listening 转成人能读的「英语·听力」；未知键原样返回，不隐藏问题 */
+export function coverageLabel(key: string): string {
+  const [lang, skill] = key.split(':')
+  return `${LANG_ZH[lang] ?? lang}·${SKILL_ZH[skill] ?? skill}`
+}
+
 export interface DailyRecap {
   dateKey: string
   minutes: number
@@ -154,7 +163,7 @@ export function weeklyReport(
       suggestionsZh.push('把「复习」放在每天第一个任务，优先清到期卡。')
     }
   }
-  if (coverageGaps.length) concerns.push(`本周未覆盖（<5 分钟）：${coverageGaps.join('、')}。`)
+  if (coverageGaps.length) concerns.push(`本周未覆盖（<5 分钟）：${coverageGaps.map(coverageLabel).join('、')}。`)
   if (dm.tooHard > dm.right && dm.tooHard >= 3) suggestionsZh.push('反馈偏难偏多：已自动下调部分材料难度，任务也会拆得更小。')
   if (dm.tooEasy > dm.right && dm.tooEasy >= 3) suggestionsZh.push('反馈偏简单偏多：已自动上调材料难度与复习间隔。')
 

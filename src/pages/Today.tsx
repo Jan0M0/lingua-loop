@@ -1,6 +1,7 @@
 // 首页（v2 §3A.2）：第一屏 = 兴趣驱动的内容入口；结构化训练（长期路线）放次要位置。
 import { useEffect, useMemo, useState } from 'react'
 import { useActions, useAppState } from '../state/AppContext'
+import { tagLabel } from '../engine/tag-labels'
 import { dailyRecap } from '../engine/recap'
 import { currentWeekPlan } from '../engine/scheduler'
 import { recommendExplore, topicLabel } from '../engine/recommend'
@@ -145,7 +146,7 @@ export function Today() {
           <h2>🌙 今日复盘</h2>
           {recap.summaryZh.map((s, i) => <p key={i} style={{ margin: '4px 0' }}>• {s}</p>)}
           {recap.topErrorTags.length > 0 && (
-            <p className="small">最常见错误类型：{recap.topErrorTags.map((t) => `${t.tag}×${t.count}`).join('、')}——明天会在同类任务上优先补练。</p>
+            <p className="small">最常见错误类型：{recap.topErrorTags.map((t) => `${tagLabel(t.tag)}×${t.count}`).join('、')}——明天会在同类任务上优先补练。</p>
           )}
           {recap.tomorrowPrioritiesZh.length > 0 && (
             <>

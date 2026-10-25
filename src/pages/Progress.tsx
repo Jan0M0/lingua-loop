@@ -3,8 +3,10 @@ import { useMemo, useState } from 'react'
 import { useAppState } from '../state/AppContext'
 import { computeMastery } from '../engine/mastery'
 import { weeklyReport, thisWeekStart } from '../engine/recap'
+import { questionTypeStats, typeStatsHighlights } from '../engine/type-stats'
 import { formatMinutes, localDateKey, dateKeyToDate } from '../engine/dates'
 import { Badge, EmptyState, MiniBars, MiniLine, ProgressBar, Segmented } from '../components/ui'
+import { tagLabel } from '../engine/tag-labels'
 
 const SKILL_LABEL: Record<string, string> = { reading: '阅读', listening: '听力', writing: '写作', speaking: '口语', vocab: '词汇', grammar: '语法' }
 const CONF_LABEL: Record<string, string> = { insufficient: '数据不足', low: '低置信', medium: '中置信', high: '较高置信' }
@@ -46,13 +48,16 @@ export function Progress() {
     return cum
   }, [state.events, lang])
 
-  const errorTags = useMemo(() => {
-    const m = new Map<string, number>()
+  const errorTags = useMemo(() => {    const m = new Map<string, number>()
     for (const e of state.events.filter((x) => x.language === lang)) {
       for (const t of e.errorTags) m.set(t, (m.get(t) ?? 0) + 1)
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
   }, [state.events, lang])
+
+  const typeStats = useMemo(() => questionTypeStats(state.events, { language: lang }), [state.events, lang])
+  const typeHighlights = useMemo(() => typeStatsHighlights(typeStats, 5), [typeStats])
+  const hasTimed = typeStats.some((t) => t.avgSeconds != null)
 
   const weekStart = thisWeekStart()
   const weekEvents = state.events.filter((e) => localDateKey(new Date(e.ts)) >= weekStart)
@@ -101,13 +106,50 @@ export function Progress() {
       </div>
 
       <div className="card">
+        <h3>分题型：正确率与速度（{lang === 'en' ? '英语' : '西语'}阅读/听力）</h3>
+        {typeStats.length === 0 ? (
+          <p className="small dim">还没有带题型标记的作答。完成一次阅读或听力练习后，这里会按「主旨/细节/推断/同义改写…」拆开统计。</p>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data">
+                <thead><tr><th>题型</th><th>作答</th><th>正确率</th><th>平均用时</th></tr></thead>
+                <tbody>
+                  {typeStats.map((t) => (
+                    <tr key={t.type}>
+                      <td className="small">{t.label}</td>
+                      <td className="small">{t.attempts} 题</td>
+                      <td className="small">
+                        {Math.round(t.accuracy * 100)}%
+                        <span className="dim"> （{t.correct}/{t.attempts}）</span>
+                      </td>
+                      <td className="small">{t.avgSeconds != null ? `${t.avgSeconds} 秒/题` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {typeHighlights.length > 0 && (
+              <div className="notice info small" style={{ marginTop: 8 }}>
+                {typeHighlights.map((h, i) => <div key={i}>• {h}</div>)}
+              </div>
+            )}
+            {typeStats.some((t) => t.attempts < 5) && (
+              <p className="small dim" style={{ marginTop: 6 }}>作答不足 5 题的题型仅供参考；分题型统计不含早期没有题型标记的记录。</p>
+            )}
+            {!hasTimed && <p className="small dim" style={{ marginTop: 4 }}>用时一栏为空：这批记录没有逐题计时。</p>}
+          </>
+        )}
+      </div>
+
+      <div className="card">
         <h3>错误模式（{lang === 'en' ? '英语' : '西语'}）</h3>
         {errorTags.length === 0 ? (
           <p className="small dim">暂无错题标签。做错的客观题会自动归类到这里。</p>
         ) : (
           errorTags.map(([tag, count]) => (
             <div key={tag} className="spread small" style={{ padding: '2px 0' }}>
-              <span>{tag}</span><span className="dim">{count} 次</span>
+              <span title={tag}>{tagLabel(tag)}</span><span className="dim">{count} 次</span>
             </div>
           ))
         )}

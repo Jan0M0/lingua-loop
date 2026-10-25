@@ -1,5 +1,5 @@
 // 选择题运行器：阅读 / 语法填空 / 语法小课 / 诊断
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { LearningEvent, PlannedTask } from '../types/app'
 import type { DiagnosticExercise, Exercise, GrammarNote, ReadingExercise, ClozeExercise } from '../types/content'
 import { useActions, useAppState } from '../state/AppContext'
@@ -17,7 +17,15 @@ export function MCRunner({ task, onFinish }: { task: PlannedTask; onFinish: () =
   const [choices, setChoices] = useState<Record<string, number>>({})
   const [submitted, setSubmitted] = useState(false)
   const [seconds] = useState(Date.now())
+  /** 每题首次作答的时间点：用于估算分题型作答速度（按答题先后差值，非精确计时） */
+  const answerTimes = useRef<Record<string, number>>({})
   const [diagResult, setDiagResult] = useState<ReturnType<typeof scoreDiagnostic> | null>(null)
+
+  const recordChoice = (qid: string, optionIndex: number) => {
+    if (submitted) return
+    if (answerTimes.current[qid] == null) answerTimes.current[qid] = Date.now()
+    setChoices((prev) => ({ ...prev, [qid]: optionIndex }))
+  }
 
   const questions = useMemo(() => {
     if (!ex) return []
@@ -40,6 +48,20 @@ export function MCRunner({ task, onFinish }: { task: PlannedTask; onFinish: () =
     setSubmitted(true)
     const secs = Math.round((Date.now() - seconds) / 1000)
     const wrongTags = questions.filter((q) => choices[q.id] !== q.answerIndex).flatMap((q) => q.errorTags)
+    // 逐题落库：题型 + 估算用时（上一题作答到本题作答的间隔）
+    let prevAt = seconds
+    const questionResults = questions.map((q) => {
+      const at = answerTimes.current[q.id] ?? prevAt
+      const dwell = Math.max(0, Math.round((at - prevAt) / 1000))
+      prevAt = at
+      return {
+        qid: q.id,
+        correct: choices[q.id] === q.answerIndex,
+        chosen: choices[q.id] ?? -1,
+        seconds: dwell,
+        questionType: 'questionType' in q ? (q as { questionType?: string }).questionType : undefined,
+      }
+    })
     if (ex.type === 'diagnostic') {
       const d = ex as DiagnosticExercise
       const result = scoreDiagnostic(d.language, d.questions.map((q, i) => ({
@@ -52,7 +74,7 @@ export function MCRunner({ task, onFinish }: { task: PlannedTask; onFinish: () =
         id: eventId(), ts: Date.now(), language: d.language, skill: 'vocab', exerciseType: 'diagnostic',
         contentId: d.id, score, correct: score >= 0.5, secondsSpent: secs, hintsUsed: 0,
         errorTags: [...new Set(wrongTags)], contentVersion: d.contentVersion,
-        detail: { questionResults: d.questions.map((q) => ({ qid: q.id, correct: choices[q.id] === q.answerIndex, chosen: choices[q.id] ?? -1, seconds: 0 })) },
+        detail: { questionResults },
       } as LearningEvent)
       return
     }
@@ -60,7 +82,7 @@ export function MCRunner({ task, onFinish }: { task: PlannedTask; onFinish: () =
       id: eventId(), ts: Date.now(), language: ex.language, skill: ex.skill, exerciseType: ex.type,
       contentId: ex.id, score, correct: score >= 0.5, secondsSpent: secs, hintsUsed: 0,
       errorTags: [...new Set(wrongTags)], contentVersion: ex.contentVersion,
-      detail: { questionResults: questions.map((q) => ({ qid: q.id, correct: choices[q.id] === q.answerIndex, chosen: choices[q.id] ?? -1, seconds: 0 })) },
+      detail: { questionResults },
     }
     await actions.recordEvent(ev)
   }
@@ -133,8 +155,8 @@ export function MCRunner({ task, onFinish }: { task: PlannedTask; onFinish: () =
                 } else if (i === chosen) cls += ' selected'
                 return (
                   <div key={i} className={cls} role="button" tabIndex={0}
-                    onClick={() => { if (!submitted) setChoices({ ...choices, [q.id]: i }) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !submitted) setChoices({ ...choices, [q.id]: i }) }}>
+                    onClick={() => recordChoice(q.id, i)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') recordChoice(q.id, i) }}>
                     <span className="letter">{'ABCDE'[i]}</span><span>{opt}</span>
                   </div>
                 )
