@@ -2,11 +2,18 @@
 
 ## 第 1 步：启动
 
+**Windows 最省事**：双击项目根目录的 `start.cmd`（自动装依赖 / 构建 / 起服务 / 开浏览器 http://localhost:4322）。
+
+命令行方式：
+
 ```bash
-npm install && npm run dev
+npm install && npm run dev     # 开发模式 http://localhost:5173
+npm run build && npm run preview   # 生产预览 http://localhost:4173
 ```
 
-浏览器打开 http://localhost:5173 。首次进入是 5 步引导（可随时跳过）：考试类型与日期 → 每日时间 → 英/西比例 → 自我评估（选填）→ 语音权限。
+⚠️ **不要直接双击 `dist/index.html`**：`file://` 下浏览器禁用 IndexedDB，应用会显示「应用启动失败」。本地优先 ≠ 单文件离线页面，它需要一个 `http://` 地址（本机服务即可，不需要联网）。
+
+首次进入是 6 步引导（可随时跳过）：考试类型与日期 → 每日时间 → 英/西比例 → 兴趣 → 动机 → 语音权限。
 
 ## 第 2 步：完成今天的任务
 
